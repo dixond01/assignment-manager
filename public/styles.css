@@ -502,6 +502,7 @@ body.view-time .assignments-only { display: none !important; }
 .log-popover .unit input::-webkit-inner-spin-button, .log-popover .unit input::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
 .log-popover input[type="date"] { flex: 1; min-width: 0; color: var(--text); }
 .log-popover .pop-actions { display: flex; gap: 8px; align-items: center; }
+.log-popover .check { align-self: flex-start; gap: 6px; color: var(--text); cursor: pointer; }
 .log-popover small { color: var(--muted); font-size: 12px; }
 
 /* Details dialog: time spent on this assignment. */

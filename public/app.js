@@ -805,6 +805,8 @@ function openLogPopover(item, anchor) {
   const minutes = el('input', { type: 'number', min: 0, max: 59, step: 1, inputMode: 'numeric', 'aria-label': 'Minutes' });
   const date = el('input', { type: 'date', value: dateKey(new Date()), required: true, 'aria-label': 'Date' });
   const error = el('small', { class: 'warning', hidden: true });
+  // Optional: check the assignment off in the same step.
+  const markDone = el('input', { type: 'checkbox' });
   const logged = state.minutesByItem.get(item.id);
 
   const close = () => pop.matches(':popover-open') && pop.hidePopover();
@@ -828,6 +830,7 @@ function openLogPopover(item, anchor) {
               body: { course: item.courseOriginal, date: date.value, minutes: total, itemId: item.id, itemTitle: item.title },
             }),
           );
+          if (markDone.checked) patchItem(item.id, { done: true });
           close();
         } catch (err) {
           error.textContent = err.message;
@@ -850,6 +853,7 @@ function openLogPopover(item, anchor) {
     el('div', { class: 'pop-sub' }, `${item.title} · ${item.course}`),
     el('div', { class: 'chips' }, quickAddChips(hours, minutes)),
     el('div', { class: 'duration' }, el('label', { class: 'unit' }, hours, 'h'), el('label', { class: 'unit' }, minutes, 'm'), date),
+    !item.done && el('label', { class: 'check' }, markDone, 'Mark as done'),
     error,
     el(
       'div',
