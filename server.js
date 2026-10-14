@@ -1,5 +1,5 @@
 // Assignment Manager — local server. Zero dependencies; requires Node 18+.
-// Pulls assignments from a Canvas API token / Canvas iCal feed and a Learning Suite iCal feed,
+// Pulls assignments from Canvas (API token or iCal feed) and any other iCal calendar feeds,
 // merges them with manual items, and stores your checkmarks/notes in ./data.
 
 const http = require('http');
@@ -22,12 +22,12 @@ const STALE_MS = 60 * 60 * 1000; // auto-refresh sources older than an hour
 const MAX_SAVED_COLORS = 24;
 
 const DEFAULT_CONFIG = {
-  canvasBaseUrl: 'https://byu.instructure.com',
+  canvasBaseUrl: '', // e.g. https://yourschool.instructure.com
   canvasToken: '',
   canvasFeedUrl: '',
-  learningSuiteFeedUrl: '',
-  semesterStart: '2026-08-31',
-  semesterEnd: '2026-12-19',
+  calendarFeedUrls: '', // other iCal feeds, one URL per line
+  semesterStart: '', // 'YYYY-MM-DD'; blank shows everything
+  semesterEnd: '',
   courseNames: {}, // original course name -> display name
   courseColors: {}, // original course name -> #rrggbb
   themes: [], // user-created themes: { id, name, colors }
@@ -87,7 +87,7 @@ function parseIcs(text) {
 }
 
 // Returns { due: ISO string, allDay }. Floating and TZID times are treated as this machine's
-// local time, which is fine while the server runs on your own computer in Utah.
+// local time, which is fine while the server runs on your own computer in your own time zone.
 function parseIcsDate(prop) {
   if (!prop) return { due: null, allDay: false };
   const m = prop.value.match(/^(\d{4})(\d{2})(\d{2})(?:T(\d{2})(\d{2})(\d{2})(Z)?)?$/);
@@ -136,25 +136,25 @@ async function fetchCanvasFeed(url) {
   });
 }
 
-// Learning Suite has one feed per course; the setting holds one URL per line.
-async function fetchLearningSuiteFeeds(urls) {
+// Other calendar feeds (often one per course); the setting holds one URL per line.
+async function fetchCalendarFeeds(urls) {
   const lists = await Promise.all(
     urls
       .split(/\s+/)
       .filter(Boolean)
-      .map((url) => fetchLearningSuiteFeed(url)),
+      .map((url) => fetchCalendarFeed(url)),
   );
   return lists.flat();
 }
 
-async function fetchLearningSuiteFeed(url) {
+async function fetchCalendarFeed(url) {
   const text = await fetchText(url);
   const calendarName = text.match(/^X-WR-CALNAME:(.*)$/m)?.[1].trim();
   const events = parseIcs(text);
   return events.map((ev) => {
     const uid = ev.UID?.value || crypto.createHash('sha1').update(JSON.stringify(ev)).digest('hex');
     const { title, course } = splitCourse(ev.SUMMARY?.value || '(untitled)');
-    // Due at the end of the event. Learning Suite sends multi-day all-day events (e.g. Fri–Sat), and an
+    // Due at the end of the event. Some feeds send multi-day all-day events (e.g. Fri–Sat), and an
     // all-day DTEND is exclusive (the day *after* the last day), so step back one day for those.
     let { due, allDay } = parseIcsDate(ev.DTEND || ev.DTSTART);
     if (allDay && ev.DTEND && due) {
@@ -164,11 +164,11 @@ async function fetchLearningSuiteFeed(url) {
       due = !start || last >= new Date(start) ? last.toISOString() : start;
     }
     return {
-      id: `ls:${uid}`,
-      source: 'learningsuite',
+      id: `ical:${uid}`,
+      source: 'calendar',
       kind: 'assignment',
       title,
-      course: course || ev.CATEGORIES?.value || calendarName || 'Learning Suite',
+      course: course || ev.CATEGORIES?.value || calendarName || 'Calendar',
       due,
       allDay,
       url: ev.URL?.value || null,
@@ -195,11 +195,12 @@ async function canvasGetAll(baseUrl, token, apiPath) {
 
 async function fetchCanvasApi(config) {
   const { canvasBaseUrl: base, canvasToken: token, semesterStart } = config;
+  if (!base) throw new Error('Set your Canvas URL in Settings (for example https://yourschool.instructure.com).');
   const courses = await canvasGetAll(base, token, '/api/v1/courses?enrollment_state=active&include[]=term&per_page=100');
   const current = courses.filter((c) => {
     if (!c.name || c.access_restricted_by_date) return false;
     const termEnd = c.term?.end_at || c.end_at;
-    return !termEnd || new Date(termEnd) >= new Date(semesterStart);
+    return !termEnd || !semesterStart || new Date(termEnd) >= new Date(semesterStart);
   });
 
   const perCourse = await Promise.all(
@@ -242,7 +243,7 @@ function activeSources(config) {
   // The API supersedes the Canvas feed (it adds submission status and undated assignments).
   if (config.canvasToken) sources.canvas = () => fetchCanvasApi(config);
   else if (config.canvasFeedUrl) sources.canvas = () => fetchCanvasFeed(config.canvasFeedUrl);
-  if (config.learningSuiteFeedUrl.trim()) sources.learningsuite = () => fetchLearningSuiteFeeds(config.learningSuiteFeedUrl);
+  if (config.calendarFeedUrls.trim()) sources.calendar = () => fetchCalendarFeeds(config.calendarFeedUrls);
   return sources;
 }
 
@@ -284,12 +285,13 @@ async function sync({ force = false } = {}) {
 function buildResponse(cache) {
   const config = loadConfig();
   const state = loadState();
-  const start = new Date(config.semesterStart + 'T00:00:00');
-  const end = new Date(config.semesterEnd + 'T23:59:59');
+  // Blank semester dates leave that side open.
+  const start = config.semesterStart ? new Date(config.semesterStart + 'T00:00:00') : null;
+  const end = config.semesterEnd ? new Date(config.semesterEnd + 'T23:59:59') : null;
 
   const synced = Object.values(cache.sources)
     .flatMap((s) => s.items)
-    .filter((item) => !item.due || (new Date(item.due) >= start && new Date(item.due) <= end));
+    .filter((item) => !item.due || ((!start || new Date(item.due) >= start) && (!end || new Date(item.due) <= end)));
   const manual = state.manual.map((m) => ({ ...m, source: 'manual', kind: 'assignment' }));
 
   const items = [...synced, ...manual].map((item) => {
@@ -554,7 +556,7 @@ async function handleApi(req, res, url) {
   if (pathname === '/api/config' && method === 'PUT') {
     const body = await readBody(req);
     const config = loadConfig();
-    for (const key of ['canvasBaseUrl', 'canvasFeedUrl', 'learningSuiteFeedUrl', 'semesterStart', 'semesterEnd']) {
+    for (const key of ['canvasBaseUrl', 'canvasFeedUrl', 'calendarFeedUrls', 'semesterStart', 'semesterEnd']) {
       if (typeof body[key] === 'string') config[key] = body[key].trim();
     }
     if (body.courseNames && typeof body.courseNames === 'object') {

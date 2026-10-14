@@ -3,10 +3,11 @@
 # showing. This copies the icon to a path named by its content hash (in data/, which is gitignored)
 # and points the Desktop shortcut and any taskbar pin at that new path.
 #
-# Usage:  powershell -ExecutionPolicy Bypass -File tools\update_shortcut.ps1 [-Source <icon.ico>]
+# Usage:  powershell -ExecutionPolicy Bypass -File tools\update_shortcut.ps1 [-Source <icon.ico>] [-Create]
 #         (default source: public\icon.ico; the server passes the icon drawn in the active theme's colors)
+#         -Create also makes the Desktop shortcut if it doesn't exist yet (setup.cmd uses this).
 
-param([string]$Source)
+param([string]$Source, [switch]$Create)
 
 $ErrorActionPreference = 'Stop'
 $app = Split-Path -Parent $PSScriptRoot
@@ -30,7 +31,7 @@ if (Test-Path $pinDir) {
         ForEach-Object { $_.FullName }
 }
 
-foreach ($link in $links | Where-Object { Test-Path $_ }) {
+foreach ($link in $links | Where-Object { $Create -or (Test-Path $_) }) {
     $shortcut = $shell.CreateShortcut($link)
     # Launch through tools\launch.ps1 with no console window (conhost --headless).
     $shortcut.TargetPath = Join-Path $env:WINDIR 'System32\conhost.exe'

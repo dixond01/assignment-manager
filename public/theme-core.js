@@ -34,8 +34,8 @@
     { id: 'light', name: 'Light', builtIn: true, colors: LIGHT },
     { id: 'dark', name: 'Dark', builtIn: true, colors: DARK },
     {
-      id: 'byu',
-      name: 'BYU',
+      id: 'navy',
+      name: 'Navy',
       builtIn: true,
       colors: { background: '#eef3f9', surface: '#ffffff', text: '#10233a', primary: '#002e5d', secondary: '#0062b8', tertiary: '#b9cde5' },
     },

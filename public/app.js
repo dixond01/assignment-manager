@@ -195,7 +195,7 @@ function render() {
   main.replaceChildren();
   if (!state.configured && !state.items.length) {
     main.append(
-      el('div', { class: 'empty' }, 'No sources connected yet. ', el('button', { onclick: openSettings }, 'Open settings'), ' to add your Canvas and Learning Suite feeds.'),
+      el('div', { class: 'empty' }, 'No sources connected yet. ', el('button', { onclick: openSettings }, 'Open settings'), ' to connect Canvas and your other calendar feeds.'),
     );
     return;
   }
@@ -222,7 +222,7 @@ function courseOptions() {
 
 // One { text, error } line per source, plus a server error if the last load failed.
 function statusLines() {
-  const labels = { canvas: 'Canvas', learningsuite: 'Learning Suite' };
+  const labels = { canvas: 'Canvas', calendar: 'Calendar feeds' };
   const lines = Object.entries(state.sources).map(([name, s]) => {
     if (s.error) return { text: `${labels[name]}: ${s.error}`, error: true };
     const when = s.fetchedAt ? `${fmtShort(new Date(s.fetchedAt))} ${fmtTime(new Date(s.fetchedAt))}` : 'never';
@@ -385,7 +385,7 @@ function openDetail(id) {
   $('#detailMeta').textContent = [
     due ? `Due ${fmtDay(due)}${item.allDay ? '' : ` at ${fmtTime(due)}`}` : 'No due date',
     item.points != null ? `${item.points} pts` : null,
-    { canvas: 'Canvas', learningsuite: 'Learning Suite', manual: 'Added manually' }[item.source],
+    { canvas: 'Canvas', calendar: 'Calendar feed', manual: 'Added manually' }[item.source],
   ]
     .filter(Boolean)
     .join(' · ');
@@ -478,7 +478,7 @@ document.querySelectorAll('[data-close]').forEach((b) => b.addEventListener('cli
 async function openSettings() {
   const config = await api('/api/config');
   const form = $('#settingsForm').elements;
-  for (const key of ['canvasBaseUrl', 'canvasFeedUrl', 'learningSuiteFeedUrl', 'semesterStart', 'semesterEnd']) form[key].value = config[key] || '';
+  for (const key of ['canvasBaseUrl', 'canvasFeedUrl', 'calendarFeedUrls', 'semesterStart', 'semesterEnd']) form[key].value = config[key] || '';
   form.canvasToken.value = '';
   form.clearCanvasToken.checked = false;
   $('#tokenStatus').textContent = config.hasCanvasToken ? 'A token is saved. Leave blank to keep it.' : 'No token saved.';
@@ -536,7 +536,7 @@ $('#settingsForm').addEventListener('submit', async (e) => {
   if (e.submitter?.value !== 'save') return;
   const form = $('#settingsForm').elements;
   const body = { clearCanvasToken: form.clearCanvasToken.checked };
-  for (const key of ['canvasBaseUrl', 'canvasToken', 'canvasFeedUrl', 'learningSuiteFeedUrl', 'semesterStart', 'semesterEnd']) body[key] = form[key].value;
+  for (const key of ['canvasBaseUrl', 'canvasToken', 'canvasFeedUrl', 'calendarFeedUrls', 'semesterStart', 'semesterEnd']) body[key] = form[key].value;
   body.courseNames = Object.fromEntries([...document.querySelectorAll('#courseNames .course-name')].map((input) => [input.dataset.original, input.value]));
   // Only colors the user picked are saved; '' tells the server to go back to automatic.
   body.courseColors = Object.fromEntries(

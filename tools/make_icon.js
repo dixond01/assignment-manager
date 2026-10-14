@@ -2,7 +2,7 @@
 //
 //   node tools/make_icon.js [themeId]
 //       Regenerate the static fallback icons public/icon.ico and public/icon.png from a built-in
-//       theme (default: byu). The running app redraws the tab and desktop icons for the active theme.
+//       theme (default: navy). The running app redraws the tab and desktop icons for the active theme.
 //
 //   node tools/make_icon.js --colors '<json>' --ico <path>
 //       Write one .ico in the given colors ({ surface, primary, secondary, tertiary }). The server runs
@@ -27,7 +27,7 @@ if (flag('--colors')) {
   }
   fs.writeFileSync(ico, iconIco(colors));
 } else {
-  const id = args[0] || 'byu';
+  const id = args[0] || 'navy';
   const theme = ThemeCore.BUILTIN_THEMES.find((t) => t.id === id);
   if (!theme) {
     console.error(`Unknown theme "${id}". Built-in themes: ${ThemeCore.BUILTIN_THEMES.map((t) => t.id).join(', ')}`);

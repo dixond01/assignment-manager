@@ -180,7 +180,7 @@
 
         <fieldset>
           <legend>Canvas</legend>
-          <label>Canvas URL<input name="canvasBaseUrl" /></label>
+          <label>Canvas URL<input name="canvasBaseUrl" placeholder="https://yourschool.instructure.com" /></label>
           <label>
             API token
             <input name="canvasToken" type="password" autocomplete="off" placeholder="Paste a new token" />
@@ -189,18 +189,18 @@
           <label class="check"><input type="checkbox" name="clearCanvasToken" /> Remove saved token</label>
           <label>
             Calendar feed URL <small>(used only when no token is set)</small>
-            <input name="canvasFeedUrl" placeholder="https://byu.instructure.com/feeds/calendars/user_….ics" />
+            <input name="canvasFeedUrl" placeholder="https://yourschool.instructure.com/feeds/calendars/….ics" />
           </label>
-          <small>Token: Canvas → Account → Settings → New Access Token. Feed: Canvas → Calendar → Calendar Feed.</small>
+          <small>Token: Canvas → Account → Settings → Approved Integrations → New Access Token. Feed: Canvas → Calendar → Calendar Feed.</small>
         </fieldset>
 
         <fieldset>
-          <legend>Learning Suite</legend>
+          <legend>Other calendar feeds</legend>
           <label>
-            Course feed URLs <small>(one per line)</small>
-            <textarea name="learningSuiteFeedUrl" rows="3" placeholder="https://learningsuite.byu.edu/…"></textarea>
+            iCal feed URLs <small>(one per line)</small>
+            <textarea name="calendarFeedUrls" rows="3" placeholder="https://…/calendar.ics"></textarea>
           </label>
-          <small>In each course: Schedule tab → Get iCalendar Feed → copy the link.</small>
+          <small>Any calendar subscription link (.ics or webcal://), such as a course schedule from another learning system.</small>
         </fieldset>
 
         <fieldset>
@@ -211,6 +211,7 @@
 
         <fieldset>
           <legend>Semester</legend>
+          <small>Only assignments due in this range are shown. Weekly time averages count from the start date.</small>
           <div class="row">
             <label>Start<input name="semesterStart" type="date" /></label>
             <label>End<input name="semesterEnd" type="date" /></label>
