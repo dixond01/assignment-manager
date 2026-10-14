@@ -1,0 +1,13 @@
+{
+  "name": "assignment-manager",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Local web app that pulls assignments from BYU Canvas and Learning Suite.",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

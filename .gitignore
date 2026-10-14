@@ -1,0 +1,5 @@
+# Holds your Canvas token and private feed URLs
+config.json
+# Your checkmarks, notes, manual items, and synced cache
+data/
+node_modules/

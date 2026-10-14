@@ -1,0 +1,128 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Assignments</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <header class="toolbar">
+      <h1>Assignments</h1>
+
+      <div class="segmented" role="tablist" aria-label="View">
+        <button type="button" data-view="week" role="tab">Week</button>
+        <button type="button" data-view="list" role="tab">List</button>
+      </div>
+
+      <div class="week-nav" id="weekNav">
+        <button type="button" id="prevWeek" aria-label="Previous week">‹</button>
+        <button type="button" id="thisWeek">Today</button>
+        <button type="button" id="nextWeek" aria-label="Next week">›</button>
+        <span id="weekLabel"></span>
+      </div>
+
+      <div class="spacer"></div>
+
+      <select id="courseFilter" aria-label="Filter by course"></select>
+      <label class="check"><input type="checkbox" id="showDone" /> Show done</label>
+      <label class="check"><input type="checkbox" id="showHidden" /> Show hidden</label>
+
+      <button type="button" id="refreshBtn">Refresh</button>
+      <button type="button" id="addBtn" class="primary">+ Add</button>
+      <button type="button" id="settingsBtn" aria-label="Settings">⚙</button>
+    </header>
+
+    <div id="status" class="status"></div>
+    <main id="main"></main>
+
+    <!-- Item details -->
+    <dialog id="detailDialog">
+      <form method="dialog" class="dialog-body">
+        <div class="detail-course" id="detailCourse"></div>
+        <h2 id="detailTitle"></h2>
+        <div id="detailMeta" class="detail-meta"></div>
+        <a id="detailLink" target="_blank" rel="noopener">Open in LMS ↗</a>
+        <div id="detailDescription" class="detail-description"></div>
+        <label>Notes<textarea id="detailNotes" rows="4"></textarea></label>
+        <div class="dialog-actions">
+          <button type="button" id="detailHide"></button>
+          <button type="button" id="detailDelete" class="danger">Delete</button>
+          <div class="spacer"></div>
+          <button value="close" class="primary">Done</button>
+        </div>
+      </form>
+    </dialog>
+
+    <!-- Manual add -->
+    <dialog id="addDialog">
+      <form method="dialog" class="dialog-body" id="addForm">
+        <h2>Add assignment</h2>
+        <label>Title<input name="title" required /></label>
+        <label>Course<input name="course" list="courseList" /></label>
+        <datalist id="courseList"></datalist>
+        <label>Due<input name="due" type="datetime-local" /></label>
+        <label>Link (optional)<input name="url" type="url" /></label>
+        <div class="dialog-actions">
+          <div class="spacer"></div>
+          <button value="cancel" formnovalidate>Cancel</button>
+          <button value="save" class="primary">Add</button>
+        </div>
+      </form>
+    </dialog>
+
+    <!-- Settings -->
+    <dialog id="settingsDialog">
+      <form method="dialog" class="dialog-body" id="settingsForm">
+        <h2>Settings</h2>
+
+        <fieldset>
+          <legend>Canvas</legend>
+          <label>Canvas URL<input name="canvasBaseUrl" /></label>
+          <label>
+            API token
+            <input name="canvasToken" type="password" autocomplete="off" placeholder="Paste a new token" />
+            <small id="tokenStatus"></small>
+          </label>
+          <label class="check"><input type="checkbox" name="clearCanvasToken" /> Remove saved token</label>
+          <label>
+            Calendar feed URL <small>(used only when no token is set)</small>
+            <input name="canvasFeedUrl" placeholder="https://byu.instructure.com/feeds/calendars/user_….ics" />
+          </label>
+          <small>Token: Canvas → Account → Settings → New Access Token. Feed: Canvas → Calendar → Calendar Feed.</small>
+        </fieldset>
+
+        <fieldset>
+          <legend>Learning Suite</legend>
+          <label>
+            Course feed URLs <small>(one per line)</small>
+            <textarea name="learningSuiteFeedUrl" rows="3" placeholder="https://learningsuite.byu.edu/…"></textarea>
+          </label>
+          <small>In each course: Schedule tab → Get iCalendar Feed → copy the link.</small>
+        </fieldset>
+
+        <fieldset>
+          <legend>Course names</legend>
+          <small>Rename how courses appear. Leave blank to keep the original. Give two courses the same name to merge them.</small>
+          <div id="courseNames" class="course-names"></div>
+        </fieldset>
+
+        <fieldset>
+          <legend>Semester</legend>
+          <div class="row">
+            <label>Start<input name="semesterStart" type="date" /></label>
+            <label>End<input name="semesterEnd" type="date" /></label>
+          </div>
+        </fieldset>
+
+        <div class="dialog-actions">
+          <div class="spacer"></div>
+          <button value="cancel" formnovalidate>Cancel</button>
+          <button value="save" class="primary">Save &amp; sync</button>
+        </div>
+      </form>
+    </dialog>
+
+    <script src="app.js"></script>
+  </body>
+</html>
