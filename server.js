@@ -316,6 +316,39 @@ function buildResponse(cache) {
   };
 }
 
+// ---------- lifetime ----------
+
+// The app runs without a console window (tools/launch.ps1), so the server stops itself once no tab has
+// it open. Each tab holds an /api/events connection, which closes the moment the tab does.
+const IDLE_EXIT_MS = Number(process.env.IDLE_EXIT_MS) || 60_000; // grace period for reloads
+const STARTUP_GRACE_MS = 2 * 60_000; // time for the first tab to connect after launch
+const tabConnections = new Set();
+let idleTimer = null;
+
+function scheduleIdleExit(ms = IDLE_EXIT_MS) {
+  clearTimeout(idleTimer);
+  if (tabConnections.size) return;
+  idleTimer = setTimeout(async () => {
+    if (tabConnections.size) return;
+    console.log('No open tabs; shutting down.');
+    await desktopIconQueue; // let a shortcut-icon update finish first
+    process.exit(0);
+  }, ms);
+}
+
+function handleEvents(req, res) {
+  res.writeHead(200, { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-store', Connection: 'keep-alive' });
+  res.write('retry: 3000\n\n'); // how fast a tab reconnects if the connection drops
+  tabConnections.add(res);
+  clearTimeout(idleTimer);
+  const keepAlive = setInterval(() => res.write(': keep-alive\n\n'), 25_000);
+  req.on('close', () => {
+    clearInterval(keepAlive);
+    tabConnections.delete(res);
+    scheduleIdleExit();
+  });
+}
+
 // ---------- HTTP ----------
 
 const MIME = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.svg': 'image/svg+xml', '.ico': 'image/x-icon', '.png': 'image/png' };
@@ -462,6 +495,9 @@ async function handleApi(req, res, url) {
   const { pathname } = url;
   const method = req.method;
 
+  if (pathname === '/api/ping') return send(res, 200, { ok: true });
+  if (pathname === '/api/events' && method === 'GET') return handleEvents(req, res);
+
   if (pathname === '/api/assignments' && method === 'GET') {
     return send(res, 200, buildResponse(await sync({ force: url.searchParams.get('refresh') === '1' })));
   }
@@ -592,7 +628,16 @@ http
       send(res, 500, { error: err.message });
     }
   })
+  .on('error', (err) => {
+    // Another copy is already serving the app; this one isn't needed.
+    if (err.code === 'EADDRINUSE') {
+      console.log(`Port ${PORT} is already in use (the app is probably already running); exiting.`);
+      process.exit(0);
+    }
+    throw err;
+  })
   .listen(PORT, HOST, () => {
     console.log(`Assignment Manager running at http://localhost:${PORT}`);
     syncDesktopIcon(); // catch up if the theme changed while the app wasn't running
+    scheduleIdleExit(STARTUP_GRACE_MS);
   });

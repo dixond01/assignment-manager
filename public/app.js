@@ -692,5 +692,48 @@ document.addEventListener('keydown', (e) => {
   if (e.key === 'ArrowRight') $('#nextWeek').click();
 });
 
+// ---------- app lifetime and single tab ----------
+
+// This connection tells the server a tab is open; it shuts down a minute after the last one closes.
+// EventSource reconnects on its own, so the banner clears when the app is started again.
+function connectToServer() {
+  const events = new EventSource('/api/events');
+  let failures = 0;
+  events.addEventListener('open', () => {
+    failures = 0;
+    $('#stoppedBanner').hidden = true;
+  });
+  events.addEventListener('error', () => {
+    if (++failures >= 2) $('#stoppedBanner').hidden = false;
+  });
+}
+
+// Opening the app again makes the newest tab the active one. Older tabs close themselves when the
+// browser allows it (a tab opened from the shortcut usually can); otherwise they show a notice.
+const tabChannel = 'BroadcastChannel' in window ? new BroadcastChannel('assignment-manager') : null;
+
+function claimThisTab() {
+  $('#otherTabNotice').hidden = true;
+  tabChannel?.postMessage('opened');
+}
+
+tabChannel?.addEventListener('message', (e) => {
+  if (e.data !== 'opened') return;
+  window.close();
+  // Still here: the browser didn't allow closing, so pause this tab instead.
+  setTimeout(() => {
+    document.querySelectorAll('dialog[open]').forEach((d) => d.close());
+    $('#otherTabNotice').hidden = false;
+  }, 300);
+});
+
+$('#useHereBtn').addEventListener('click', () => {
+  claimThisTab();
+  loadThemes();
+  load();
+});
+
+claimThisTab();
+connectToServer();
 loadThemes();
 load();

@@ -1,5 +1,3 @@
 @echo off
-rem Double-click to launch the Assignment Manager and open it in your browser.
-cd /d "%~dp0"
-start "" http://localhost:3456
-node server.js
+rem Open the Assignment Manager (starts the server hidden if needed; it stops itself when the app is closed).
+start "" "%WINDIR%\System32\conhost.exe" --headless powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0tools\launch.ps1"

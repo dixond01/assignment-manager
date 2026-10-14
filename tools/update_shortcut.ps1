@@ -1,4 +1,4 @@
-# Point the "Assignment Manager" shortcuts at the current icon.
+# Point the "Assignment Manager" shortcuts at the launcher (tools\launch.ps1) and the current icon.
 # Windows caches shortcut icons by file path, so after regenerating public/icon.ico the old icon keeps
 # showing. This copies the icon to a path named by its content hash (in data/, which is gitignored)
 # and points the Desktop shortcut and any taskbar pin at that new path.
@@ -32,6 +32,10 @@ if (Test-Path $pinDir) {
 
 foreach ($link in $links | Where-Object { Test-Path $_ }) {
     $shortcut = $shell.CreateShortcut($link)
+    # Launch through tools\launch.ps1 with no console window (conhost --headless).
+    $shortcut.TargetPath = Join-Path $env:WINDIR 'System32\conhost.exe'
+    $shortcut.Arguments = "--headless powershell.exe -NoProfile -ExecutionPolicy Bypass -File `"$(Join-Path $app 'tools\launch.ps1')`""
+    $shortcut.WorkingDirectory = $app
     $shortcut.IconLocation = "$target,0"
     $shortcut.Save()
     Write-Output "Updated $link"

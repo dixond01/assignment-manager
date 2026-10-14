@@ -46,6 +46,19 @@
       <button type="button" id="settingsBtn" class="icon-btn" aria-label="Settings" title="Settings">⚙</button>
     </header>
 
+    <div id="stoppedBanner" class="banner" role="status" hidden>
+      The app has stopped (it shuts down a minute after its last tab closes). Open it again from the Assignment Manager shortcut;
+      this tab will reconnect on its own.
+    </div>
+
+    <div id="otherTabNotice" class="takeover" hidden>
+      <div class="takeover-card" role="alertdialog" aria-labelledby="otherTabTitle">
+        <h2 id="otherTabTitle">Opened in another tab</h2>
+        <p>Assignment Manager is open in a newer tab, so this one paused to avoid conflicting changes. You can close this tab.</p>
+        <button type="button" id="useHereBtn" class="primary">Use this tab instead</button>
+      </div>
+    </div>
+
     <div id="status" class="status"></div>
     <main id="main"></main>
 
