@@ -19,6 +19,7 @@ const STATE_PATH = path.join(DATA_DIR, 'state.json');
 const CACHE_PATH = path.join(DATA_DIR, 'cache.json');
 const DESKTOP_ICON_PATH = path.join(DATA_DIR, 'desktop-icon.json');
 const STALE_MS = 60 * 60 * 1000; // auto-refresh sources older than an hour
+const MAX_SAVED_COLORS = 24;
 
 const DEFAULT_CONFIG = {
   canvasBaseUrl: 'https://byu.instructure.com',
@@ -30,6 +31,7 @@ const DEFAULT_CONFIG = {
   courseNames: {}, // original course name -> display name
   courseColors: {}, // original course name -> #rrggbb
   themes: [], // user-created themes: { id, name, colors }
+  savedColors: [], // the color picker's saved palette, newest first
   activeThemeId: ThemeCore.DEFAULT_THEME_ID,
 };
 
@@ -344,7 +346,7 @@ function applyItemChanges(entry, body) {
 }
 
 function publicConfig(config) {
-  const { canvasToken, themes, activeThemeId, ...rest } = config;
+  const { canvasToken, themes, activeThemeId, savedColors, ...rest } = config;
   return { ...rest, hasCanvasToken: Boolean(canvasToken) };
 }
 
@@ -466,6 +468,17 @@ async function handleApi(req, res, url) {
 
   if (pathname.startsWith('/api/themes') || pathname === '/api/active-theme') {
     if ((await handleThemes(req, res, pathname, method)) !== false) return;
+  }
+
+  if (pathname === '/api/saved-colors' && method === 'GET') return send(res, 200, { colors: loadConfig().savedColors });
+
+  if (pathname === '/api/saved-colors' && method === 'PUT') {
+    const body = await readBody(req);
+    if (!Array.isArray(body.colors)) return send(res, 400, { error: 'colors must be an array' });
+    const config = loadConfig();
+    config.savedColors = [...new Set(body.colors.filter(ThemeCore.isHex).map((c) => c.toLowerCase()))].slice(0, MAX_SAVED_COLORS);
+    writeJson(CONFIG_PATH, config);
+    return send(res, 200, { colors: config.savedColors });
   }
 
   if (pathname === '/api/config' && method === 'GET') return send(res, 200, publicConfig(loadConfig()));

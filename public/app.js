@@ -73,6 +73,7 @@ const courseColorOf = (item) => item.courseColor || autoCourseColor(item.course)
 
 // A color input wrapped as a field: swatch, optional name and hint, and the current hex value.
 function colorField(input, name, hint) {
+  ColorPicker.attach(input); // our themed picker instead of the browser's
   const hex = el('span', { class: 'hex' }, input.value);
   input.addEventListener('input', () => (hex.textContent = input.value));
   const text = name && el('span', { class: 'name' }, name, hint && el('span', { class: 'hint' }, hint));
@@ -424,6 +425,10 @@ function courseRow(original, config) {
     reset.style.visibility = isCustom ? 'visible' : 'hidden';
   };
   colorInput.addEventListener('input', () => update(true, colorInput.value));
+  // Cancelling the picker restores the color; also restore whether it was custom or automatic.
+  let customBeforePicker = '';
+  colorInput.addEventListener('colorpicker:open', () => (customBeforePicker = colorInput.dataset.custom));
+  colorInput.addEventListener('colorpicker:cancel', () => update(Boolean(customBeforePicker), colorInput.value));
   reset.addEventListener('click', () => update(false, autoColor()));
   // Automatic colors follow the display name, so keep the preview in sync while renaming.
   nameInput.addEventListener('input', () => colorInput.dataset.custom || update(false, autoColor()));
