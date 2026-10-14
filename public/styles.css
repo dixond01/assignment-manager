@@ -39,6 +39,9 @@
   }
 }
 
+/* Native checkboxes (and other form controls) take the theme's primary color. */
+:root { accent-color: var(--accent); }
+
 * { box-sizing: border-box; }
 [hidden] { display: none !important; }
 
