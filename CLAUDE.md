@@ -1,6 +1,6 @@
 # Assignment Manager
 
-A local-only web app that pulls a student's assignments from Canvas and other iCal calendar feeds into a weekly grid, a due-date list, and a time tracker. Single user per install; Windows first (Desktop shortcut, themed icon), but the server and page also run on macOS/Linux with `npm start`. Node 18+. See README.md for user-facing docs.
+A local-only web app that pulls a student's assignments from Canvas and other iCal calendar feeds into a weekly grid, a due-date list, and a time tracker. Single user per install. Windows, macOS, and Linux each get a desktop shortcut with a themed icon; `npm start` is the fallback everywhere. Node 18+. See README.md for user-facing docs.
 
 ## Hard rules
 
@@ -12,7 +12,9 @@ A local-only web app that pulls a student's assignments from Canvas and other iC
 
 ## Running and testing
 
-- On Windows the app opens from the Desktop shortcut (made by `setup.cmd`) → `tools/launch.ps1` via `conhost.exe --headless` (no console window). The server stops itself ~60 s after the last app tab closes. `npm start` runs it visibly for debugging.
+- Opening the app: Windows shortcut → `tools/launch.ps1` via `conhost.exe --headless` (no console window); macOS app bundle, Linux `.desktop` launcher, and `npm start` → `tools/launch.js` (detached server, then opens the browser). The server stops itself ~60 s after the last app tab closes. `npm run dev` runs the server in the foreground for debugging.
+- Only Windows can be tested on this machine. Test macOS/Linux shortcut generation with `node tools/shortcut.js --create --platform darwin|linux --home <temp dir>` **from a copy of the app** (it writes icons and `desktop-icon.json` into the app's own `data/`). WSL Ubuntu (no Node) can validate files: Python `plistlib`, `sh -n`.
+- **A test copy of the app must never update the real shortcut.** On startup the server redraws the shortcut icon unless `data/desktop-icon.json` matches the active theme, and the Windows script points shortcuts at *its own* folder. Before starting a server from a copy, write that marker (key = `JSON.stringify(ThemeCore.resolveColors(activeTheme))`).
 - **The user's own copy is usually running on port 3456. Don't stop it or test against it in ways that write data.** Test server changes on a spare port: `PORT=3460 node server.js` (run in the background, then stop it).
 - Tests that write data (themes, saved colors, manual items, time entries, clearing, settings) touch the real `config.json` / `data/state.json`. **Back them up to a temp folder first, restore afterward (verify with sha256), and delete the config backup** because it contains the token.
 - Front-end-only changes can be checked in the running app as long as nothing is saved (for example, `applyColors(...)` in the page, or opening and then cancelling dialogs). Opening a second app tab pauses the first one, so prefer a spare-port server.
@@ -30,7 +32,9 @@ A local-only web app that pulls a student's assignments from Canvas and other iC
 - `public/theme-core.js` and `public/icon-core.js` are UMD modules shared by the browser (`window.ThemeCore` / `window.IconCore`) and the server (`require`).
 - `public/color-picker.js`: custom themed picker that replaces the native `<input type="color">` popup.
 - `lib/icon-file.js`: PNG/.ico encoder. `tools/make_icon.js`: regenerates the fallback `public/icon.*` (Navy colors) or draws one .ico from `--colors`.
-- `setup.cmd` → `tools/update_shortcut.ps1 -Create`: makes the Desktop shortcut. Without `-Create` the script only updates existing shortcuts and taskbar pins (the server calls it on theme changes), pointing them at the launcher and a content-hashed icon copy in `data/`.
+- `tools/setup.js` (`npm run setup`, `setup.cmd`, `setup.command`): Windows → `tools/update_shortcut.ps1 -Create`; macOS/Linux → `tools/shortcut.js --create`; then `tools/launch.js`.
+- `tools/update_shortcut.ps1`: without `-Create` it only updates existing shortcuts and taskbar pins (the server calls it on theme changes), pointing them at the launcher and a content-hashed icon copy in `data/`.
+- `tools/shortcut.js`: macOS `~/Applications/Assignment Manager.app` (sh `launch` script with the absolute Node path, `LSUIElement`, `.icns` of 128/256/512 PNGs named by hash) + Desktop symlink; Linux `~/.local/share/applications/assignment-manager.desktop` + Desktop copy (marked trusted with `gio`), icon `data/shortcut-icon-<hash>.png`. `--colors` redraws and updates existing shortcuts only (the server's theme-change hook on macOS/Linux). Drawing takes ~20 s, so it always runs in a child process.
 
 ## Behavior decisions (keep these)
 
@@ -50,8 +54,8 @@ A local-only web app that pulls a student's assignments from Canvas and other iC
 ## Icon
 
 - Design: a centered spiral checklist planner (two checked boxes, one open) with three sparkles, on a **transparent** backdrop so the taskbar/tab shows through. It's drawn with four theme roles: surface = page, primary = outline/checkboxes, secondary = sparkles/rings/open item's line, tertiary = checked items' lines.
-- The icon follows the active theme: the tab favicon is drawn client-side; the Desktop shortcut/taskbar icon is redrawn by the server in a child process (it takes ~3 s) on theme change, edits to the active theme, and startup (skipped if the colors are unchanged, via `data/desktop-icon.json`).
-- **Windows and browsers cache icons by path/URL.** Always change the path: hashed `data/shortcut-icon-<hash>.ico`, and `icon.png?v=<mtime>` in index.html.
+- The icon follows the active theme: the tab favicon is drawn client-side; the desktop shortcut icon (Windows shortcut/taskbar pin, macOS app, Linux launchers) is redrawn by the server in a child process (~3 s on Windows, ~20 s for the macOS .icns) on theme change, edits to the active theme, and startup (skipped if the colors are unchanged, via `data/desktop-icon.json`).
+- **Windows and browsers cache icons by path/URL.** Always change the path: hashed `data/shortcut-icon-<hash>.ico` / `.png`, hashed `icon-<hash>.icns` in the macOS bundle (plus a bumped bundle date), and `icon.png?v=<mtime>` in index.html.
 
 ## Windows gotchas learned
 

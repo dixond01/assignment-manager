@@ -437,14 +437,14 @@ function run(file, args) {
   });
 }
 
-// Redraw the desktop shortcut's icon in the active theme's colors (Windows only). Drawing and the
-// shortcut update run in child processes so the server stays responsive. Requests made while one is
-// running collapse into a single follow-up with the latest colors.
+// Redraw the desktop shortcut's icon in the active theme's colors (Windows, macOS, Linux). Drawing and
+// the shortcut update run in child processes so the server stays responsive. Requests made while one
+// is running collapse into a single follow-up with the latest colors.
 let desktopIconQueue = Promise.resolve();
 let desktopIconPending = false;
 
 function syncDesktopIcon() {
-  if (process.platform !== 'win32' || desktopIconPending) return;
+  if (!['win32', 'darwin', 'linux'].includes(process.platform) || desktopIconPending) return;
   desktopIconPending = true;
   desktopIconQueue = desktopIconQueue.then(async () => {
     desktopIconPending = false;
@@ -454,9 +454,14 @@ function syncDesktopIcon() {
     if (readJson(DESKTOP_ICON_PATH, {}).key === key) return;
     try {
       fs.mkdirSync(DATA_DIR, { recursive: true });
-      const ico = path.join(DATA_DIR, 'theme-icon.ico');
-      await run(process.execPath, [path.join(ROOT, 'tools', 'make_icon.js'), '--colors', key, '--ico', ico]);
-      await run('powershell.exe', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', path.join(ROOT, 'tools', 'update_shortcut.ps1'), '-Source', ico]);
+      if (process.platform === 'win32') {
+        const ico = path.join(DATA_DIR, 'theme-icon.ico');
+        await run(process.execPath, [path.join(ROOT, 'tools', 'make_icon.js'), '--colors', key, '--ico', ico]);
+        await run('powershell.exe', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', path.join(ROOT, 'tools', 'update_shortcut.ps1'), '-Source', ico]);
+      } else {
+        // Updates the macOS app or Linux launchers if they exist; does nothing otherwise.
+        await run(process.execPath, [path.join(ROOT, 'tools', 'shortcut.js'), '--colors', key]);
+      }
       writeJson(DESKTOP_ICON_PATH, { key, updatedAt: new Date().toISOString() });
       console.log('Desktop shortcut icon updated to match the theme.');
     } catch (err) {

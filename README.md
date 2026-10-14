@@ -12,45 +12,55 @@ Everything stays on your computer. The app only talks to Canvas and the calendar
 
 ## What you need
 
-- **Windows 10 or 11** for the Desktop shortcut and the themed icon. On macOS or Linux, the app itself works, but you start it from a terminal (see [Run it on macOS or Linux](#run-it-on-macos-or-linux)).
+- **Windows 10/11, macOS, or Linux.** Each gets a desktop shortcut with an icon that matches your theme. If a shortcut ever doesn't work, one command opens the app instead (`npm start`).
 - **Node.js 18 or newer.** Nothing else; the app has no other dependencies to install.
 - **Git**, to download the app and get updates. You can also download it as a ZIP instead.
 - A **Canvas** account (any school that uses Canvas), and/or calendar feed links for your courses.
 
 ## 1. Install Node.js
 
-Check whether you already have it. Open PowerShell (or Terminal) and run:
+Check whether you already have it. Open a terminal (PowerShell on Windows, Terminal on macOS) and run:
 
 ```
 node --version
 ```
 
-If it prints `v18` or higher, skip to the next step. Otherwise, install the **LTS** version from [nodejs.org](https://nodejs.org), or on Windows run:
+If it prints `v18` or higher, skip to the next step. Otherwise, install the **LTS** version from [nodejs.org](https://nodejs.org), or:
 
-```
-winget install OpenJS.NodeJS.LTS
-```
+- Windows: `winget install OpenJS.NodeJS.LTS`
+- macOS with Homebrew: `brew install node`
+- Linux: your package manager's `nodejs` package (check that it's version 18 or newer), or [nvm](https://github.com/nvm-sh/nvm)
 
-Close and reopen PowerShell after installing so `node` is found.
+Close and reopen the terminal after installing so `node` is found.
 
 ## 2. Download the app
 
 ```
-cd $HOME\Documents
+cd ~/Documents
 git clone https://github.com/dixond01/assignment-manager.git
 ```
 
-This makes an `assignment-manager` folder in your Documents. You can put it anywhere, but don't move it after step 3 (the shortcut points to it).
+This makes an `assignment-manager` folder in your Documents. You can put it anywhere, but don't move it after step 3 (the shortcut points to it). If you do move it, run the setup again.
 
 No Git? On the GitHub page, click **Code → Download ZIP** and unzip it where you want it.
 
-## 3. Create the Desktop shortcut (Windows)
+## 3. Create the shortcut
 
-In the `assignment-manager` folder, double-click **`setup.cmd`**.
+Setup creates the shortcut and opens the app in your browser. Drawing the icon can take up to half a minute.
 
-It creates an **Assignment Manager** shortcut on your Desktop and opens the app in your browser. To pin it to the taskbar, right-click the shortcut → **Show more options → Pin to taskbar**.
+- **Windows:** in the `assignment-manager` folder, double-click **`setup.cmd`**. It puts an **Assignment Manager** shortcut on your Desktop. To pin it to the taskbar, right-click the shortcut → **Show more options → Pin to taskbar**.
+- **macOS:** in the `assignment-manager` folder, double-click **`setup.command`**. It creates **Assignment Manager** in your Applications folder (in your home folder; find it with Spotlight) and a link to it on your Desktop. To keep it in the Dock, drag it there. If macOS says the file can't be opened, run `npm run setup` in Terminal from the `assignment-manager` folder instead.
+- **Linux:** in a terminal, in the `assignment-manager` folder, run `npm run setup`. It adds **Assignment Manager** to your app menu and puts a launcher on your Desktop. If your desktop shows the launcher as untrusted, right-click it → **Allow Launching**.
 
-From now on, open the app from the shortcut. There's no console window: the app runs in the background and stops by itself about a minute after you close its last browser tab.
+From now on, open the app from the shortcut. There's no window to manage: the app runs in the background and stops by itself about a minute after you close its last browser tab.
+
+**Without a shortcut:** in a terminal, in the `assignment-manager` folder, run
+
+```
+npm start
+```
+
+It starts the app (or finds it already running) and opens it in your browser, then returns. Run setup again if you reinstall Node, since the shortcut remembers where Node was installed.
 
 ## 4. Connect your classes
 
@@ -96,23 +106,12 @@ After the first sync, your courses appear in Settings under **Course names**. Yo
 
 ### Themes
 
-Click 🎨 to switch themes: **System** (follows your computer's light or dark mode), **Light**, **Dark**, or **Navy**. **New theme** or **Duplicate** lets you pick your own six colors. On Windows, the Desktop shortcut and taskbar icon change to match within a few seconds.
-
-## Run it on macOS or Linux
-
-The Desktop shortcut and icon are Windows-only, but the app itself works the same. In a terminal:
-
-```
-cd assignment-manager
-npm start
-```
-
-Then open <http://localhost:3456> in your browser. Leave the terminal open while you use the app. It stops by itself about a minute after you close the last tab, or press Ctrl+C.
+Click 🎨 to switch themes: **System** (follows your computer's light or dark mode), **Light**, **Dark**, or **Navy**. **New theme** or **Duplicate** lets you pick your own six colors. The desktop shortcut's icon changes to match within a few seconds (macOS may need a moment longer to refresh it).
 
 ## Updating
 
 ```
-cd $HOME\Documents\assignment-manager
+cd ~/Documents/assignment-manager
 git pull
 ```
 
@@ -125,7 +124,7 @@ Then close the app's tab, wait a minute, and open it again. Your settings and da
   - `data/`: your checkmarks, notes, hidden items, your own assignments, logged time, and a cache of what was synced.
 - Both are in `.gitignore`, so Git never uploads them. **Don't share `config.json`**: the token gives access to your Canvas account, and feed links are usually private.
 - The app only accepts connections from your own computer (`127.0.0.1`), so no one else on your network can open it.
-- To back up your data, copy `config.json` and the `data` folder. To remove the app, delete the folder and the Desktop shortcut, and delete the token in Canvas (**Account → Settings → Approved Integrations**).
+- To back up your data, copy `config.json` and the `data` folder. To remove the app, delete the folder and the shortcut (Windows: the Desktop shortcut; macOS: **Assignment Manager** in your home folder's Applications and its Desktop link; Linux: `~/.local/share/applications/assignment-manager.desktop` and the Desktop launcher), and delete the token in Canvas (**Account → Settings → Approved Integrations**).
 
 ## Troubleshooting
 
@@ -134,17 +133,19 @@ Then close the app's tab, wait a minute, and open it again. Your settings and da
 - **"Canvas rejected the token (401)."** The token expired or was deleted. Make a new one in Canvas and paste it into Settings.
 - **A red sync error under the toolbar.** That source couldn't be reached. The app keeps showing what it last synced, and you can try **Sync** again later.
 - **"The app has stopped."** You closed the app's last tab, so it shut down. Open it again from the shortcut; the old tab reconnects by itself.
-- **Port 3456 is already used by another program.** Start the app on another port: `set PORT=3460` then `npm start` in the same Command Prompt (or `PORT=3460 npm start` on macOS/Linux), and open `http://localhost:3460`.
-- **The shortcut does nothing.** Make sure `node --version` works in a new PowerShell window. If you moved the folder, run `setup.cmd` again.
+- **Port 3456 is already used by another program.** Start the app on another port: `PORT=3460 npm start` on macOS/Linux, or `set PORT=3460` and then `npm start` in a Windows Command Prompt.
+- **The shortcut does nothing.** Run `npm start` from the `assignment-manager` folder: it shows what went wrong. If you moved the folder or reinstalled Node, run the setup again. Server errors are logged in `data/server-error.log`.
 
 ## How it works
 
 - `server.js`: a Node server with no dependencies. It fetches Canvas (API or calendar feed) and your other calendar feeds, caches them in `data/cache.json`, and stores your changes in `data/state.json`.
 - `public/`: the web page (plain HTML, CSS, and JavaScript; no build step). `theme-core.js` (theme colors) and `icon-core.js` (icon drawing) are shared with the server.
 - `lib/icon-file.js`: writes the icon as PNG and Windows `.ico`.
-- `setup.cmd`: creates the Desktop shortcut and opens the app. `start.cmd` just opens the app.
-- `tools/launch.ps1`: starts the server in the background if it isn't running, then opens the app. The shortcut runs it through `conhost.exe --headless`, so no window appears.
-- `tools/update_shortcut.ps1`: creates or updates the Desktop shortcut and taskbar pin and their icon. The server runs it when you change themes.
+- `tools/setup.js` (`npm run setup`, `setup.cmd`, `setup.command`): creates the shortcut for your OS, then opens the app.
+- `tools/launch.js` (`npm start`, the macOS and Linux shortcuts): starts the server in the background if it isn't running, then opens the app in your browser. `npm run dev` runs the server in the foreground instead, for debugging.
+- `tools/shortcut.js`: the macOS app bundle and Linux launchers, and their themed icons.
+- `tools/launch.ps1` and `tools/update_shortcut.ps1`: the Windows equivalents. The Windows shortcut runs `launch.ps1` through `conhost.exe --headless`, so no window appears. `start.cmd` opens the app on Windows.
+- The server redraws the shortcut's icon when you change themes.
 - `tools/make_icon.js`: redraws the default icon in `public/` (`node tools/make_icon.js [themeId]`).
 - `CLAUDE.md`: notes for working on the code with [Claude Code](https://claude.com/claude-code).
 

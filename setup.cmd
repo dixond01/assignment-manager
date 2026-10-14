@@ -5,5 +5,4 @@ where node >nul 2>nul || (
   pause
   exit /b 1
 )
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0tools\update_shortcut.ps1" -Create
-call "%~dp0start.cmd"
+node "%~dp0tools\setup.js"
