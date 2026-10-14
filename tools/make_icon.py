@@ -9,9 +9,9 @@ import zlib
 from pathlib import Path
 
 PAGE_FILL = (0xFF, 0xFF, 0xFF)  # planner paper
-PRIMARY = (0x14, 0x14, 0x14)  # page outline, checkboxes
-SECONDARY = (0x7A, 0x7A, 0x7A)  # sparkles, spiral rings, unchecked item line
-TERTIARY = (0xD6, 0xD6, 0xD6)  # checked item lines
+PRIMARY = (0x00, 0x2E, 0x5D)  # page outline, checkboxes (BYU navy)
+SECONDARY = (0x00, 0x62, 0xB8)  # sparkles, spiral rings, unchecked item line (BYU royal)
+TERTIARY = (0xB9, 0xCD, 0xE5)  # checked item lines (light BYU blue)
 
 # Planner group (spiral rings + page) spans x 0.15-0.85, y 0.12-0.88: centered on the canvas.
 PAGE = (0.24, 0.12, 0.85, 0.88)
