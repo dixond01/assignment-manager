@@ -3,11 +3,14 @@
 # showing. This copies the icon to a path named by its content hash (in data/, which is gitignored)
 # and points the Desktop shortcut and any taskbar pin at that new path.
 #
-# Usage:  powershell -ExecutionPolicy Bypass -File tools\update_shortcut.ps1
+# Usage:  powershell -ExecutionPolicy Bypass -File tools\update_shortcut.ps1 [-Source <icon.ico>]
+#         (default source: public\icon.ico; the server passes the icon drawn in the active theme's colors)
+
+param([string]$Source)
 
 $ErrorActionPreference = 'Stop'
 $app = Split-Path -Parent $PSScriptRoot
-$source = Join-Path $app 'public\icon.ico'
+$source = if ($Source) { $Source } else { Join-Path $app 'public\icon.ico' }
 $dataDir = Join-Path $app 'data'
 New-Item -ItemType Directory -Force $dataDir | Out-Null
 

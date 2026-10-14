@@ -435,11 +435,27 @@ function applyColors(colors) {
   return vars;
 }
 
+function iconCanvas(colors, size) {
+  const canvas = el('canvas', { width: size, height: size });
+  canvas.getContext('2d').putImageData(new ImageData(IconCore.renderIcon(size, colors), size, size), 0, 0);
+  return canvas;
+}
+
+// Draw the tab icon in the given colors; returns it as a data URL.
+function setFavicon(colors) {
+  const url = iconCanvas(colors, 64).toDataURL('image/png');
+  $('link[rel="icon"]').href = url;
+  return url;
+}
+
 function applyActiveTheme() {
-  const vars = applyColors(activeTheme().colors);
+  const theme = activeTheme();
+  const vars = applyColors(theme.colors);
+  const favicon = setFavicon(ThemeCore.resolveColors(theme, prefersDark.matches));
   try {
     if (vars) localStorage.setItem('themeVars', JSON.stringify(vars));
     else localStorage.removeItem('themeVars');
+    localStorage.setItem('themeFavicon', favicon);
   } catch {}
 }
 
@@ -477,6 +493,7 @@ function renderThemeList() {
           onclick: choose,
           onkeydown: (e) => (e.key === 'Enter' || e.key === ' ') && (e.preventDefault(), choose()),
         },
+        iconCanvas(colors, 56),
         el('span', { class: 'swatches' }, ThemeCore.COLOR_KEYS.map((key) => el('span', { style: `background: ${colors[key]}`, title: ThemeCore.COLOR_LABELS[key] }))),
         el(
           'div',
@@ -536,6 +553,7 @@ function openThemeEditor(theme) {
 function previewEditedTheme() {
   const { colors } = themeState.editing;
   applyColors(colors);
+  setFavicon(colors);
   const warnings = ThemeCore.contrastWarnings(colors);
   $('#themeWarnings').textContent = warnings.join(' ');
   $('#themeWarnings').hidden = !warnings.length;
@@ -592,7 +610,11 @@ $('#themesForm').addEventListener('submit', (e) => {
 // Escape while editing discards the live preview.
 $('#themesDialog').addEventListener('cancel', () => themeState.editing && closeThemeEditor());
 $('#themesDialog').addEventListener('close', () => themeState.editing && closeThemeEditor());
-prefersDark.addEventListener('change', () => $('#themesDialog').open && !themeState.editing && renderThemeList());
+prefersDark.addEventListener('change', () => {
+  if (themeState.editing) return;
+  applyActiveTheme(); // System's tab icon follows Windows light/dark
+  if ($('#themesDialog').open) renderThemeList();
+});
 
 // ---------- toolbar ----------
 

@@ -6,6 +6,7 @@ const http = require('http');
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
+const { execFile } = require('child_process');
 const ThemeCore = require('./public/theme-core.js');
 
 const PORT = Number(process.env.PORT) || 3456;
@@ -16,6 +17,7 @@ const DATA_DIR = path.join(ROOT, 'data');
 const CONFIG_PATH = path.join(ROOT, 'config.json');
 const STATE_PATH = path.join(DATA_DIR, 'state.json');
 const CACHE_PATH = path.join(DATA_DIR, 'cache.json');
+const DESKTOP_ICON_PATH = path.join(DATA_DIR, 'desktop-icon.json');
 const STALE_MS = 60 * 60 * 1000; // auto-refresh sources older than an hour
 
 const DEFAULT_CONFIG = {
@@ -356,6 +358,44 @@ function themesResponse(config) {
   return { themes: allThemes(config), activeThemeId: active };
 }
 
+// ---------- desktop icon ----------
+
+function run(file, args) {
+  return new Promise((resolve, reject) => {
+    execFile(file, args, { windowsHide: true, timeout: 60_000 }, (err, stdout, stderr) =>
+      err ? reject(new Error((stderr || err.message).trim())) : resolve(stdout),
+    );
+  });
+}
+
+// Redraw the desktop shortcut's icon in the active theme's colors (Windows only). Drawing and the
+// shortcut update run in child processes so the server stays responsive. Requests made while one is
+// running collapse into a single follow-up with the latest colors.
+let desktopIconQueue = Promise.resolve();
+let desktopIconPending = false;
+
+function syncDesktopIcon() {
+  if (process.platform !== 'win32' || desktopIconPending) return;
+  desktopIconPending = true;
+  desktopIconQueue = desktopIconQueue.then(async () => {
+    desktopIconPending = false;
+    const config = loadConfig();
+    const colors = ThemeCore.resolveColors(findTheme(config, config.activeThemeId) || ThemeCore.BUILTIN_THEMES[0]);
+    const key = JSON.stringify(colors);
+    if (readJson(DESKTOP_ICON_PATH, {}).key === key) return;
+    try {
+      fs.mkdirSync(DATA_DIR, { recursive: true });
+      const ico = path.join(DATA_DIR, 'theme-icon.ico');
+      await run(process.execPath, [path.join(ROOT, 'tools', 'make_icon.js'), '--colors', key, '--ico', ico]);
+      await run('powershell.exe', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', path.join(ROOT, 'tools', 'update_shortcut.ps1'), '-Source', ico]);
+      writeJson(DESKTOP_ICON_PATH, { key, updatedAt: new Date().toISOString() });
+      console.log('Desktop shortcut icon updated to match the theme.');
+    } catch (err) {
+      console.error('Could not update the desktop shortcut icon:', err.message);
+    }
+  });
+}
+
 function cleanTheme(body) {
   return {
     name: body.name.trim(),
@@ -383,6 +423,7 @@ async function handleThemes(req, res, pathname, method) {
     if (!findTheme(config, id)) return send(res, 404, { error: 'No such theme.' });
     config.activeThemeId = id;
     writeJson(CONFIG_PATH, config);
+    syncDesktopIcon();
     return send(res, 200, themesResponse(config));
   }
 
@@ -399,6 +440,7 @@ async function handleThemes(req, res, pathname, method) {
     if (error) return send(res, 400, { error });
     Object.assign(theme, cleanTheme(body));
     writeJson(CONFIG_PATH, config);
+    if (themesResponse(config).activeThemeId === id) syncDesktopIcon();
     return send(res, 200, theme);
   }
 
@@ -537,4 +579,7 @@ http
       send(res, 500, { error: err.message });
     }
   })
-  .listen(PORT, HOST, () => console.log(`Assignment Manager running at http://localhost:${PORT}`));
+  .listen(PORT, HOST, () => {
+    console.log(`Assignment Manager running at http://localhost:${PORT}`);
+    syncDesktopIcon(); // catch up if the theme changed while the app wasn't running
+  });
