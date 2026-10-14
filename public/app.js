@@ -55,12 +55,21 @@ function el(tag, props = {}, ...children) {
   return node;
 }
 
-// Stable color per course name.
-function courseColor(course) {
+// Automatic, stable color per course name, as #rrggbb (hsl(hue, 65%, 50%)).
+function autoCourseColor(course) {
   let h = 0;
   for (const ch of course || '') h = (h * 31 + ch.charCodeAt(0)) >>> 0;
-  return `hsl(${h % 360} 65% 50%)`;
+  const hue = h % 360;
+  const a = 0.65 * 0.5;
+  const channel = (n) => {
+    const k = (n + hue / 30) % 12;
+    return Math.round(255 * (0.5 - a * Math.max(-1, Math.min(k - 3, 9 - k, 1))));
+  };
+  return '#' + [0, 8, 4].map((n) => channel(n).toString(16).padStart(2, '0')).join('');
 }
+
+// The color shown for an item's course: the user's pick, else the automatic one.
+const courseColorOf = (item) => item.courseColor || autoCourseColor(item.course);
 
 async function api(path, options = {}) {
   const res = await fetch(path, {
@@ -184,7 +193,7 @@ function renderClearedList() {
       ? cleared.map((item) =>
           el(
             'div',
-            { class: 'cleared-row', style: `--course: ${courseColor(item.course)}` },
+            { class: 'cleared-row', style: `--course: ${courseColorOf(item)}` },
             el(
               'div',
               { class: 'body' },
@@ -216,7 +225,7 @@ function renderCard(item, { showDate = false } = {}) {
   ];
   return el(
     'div',
-    { class: `card${item.done ? ' done' : ''}${item.hidden ? ' hidden-item' : ''}`, style: `--course: ${courseColor(item.course)}` },
+    { class: `card${item.done ? ' done' : ''}${item.hidden ? ' hidden-item' : ''}`, style: `--course: ${courseColorOf(item)}` },
     el('input', { type: 'checkbox', checked: item.done, title: 'Mark done', onchange: (e) => patchItem(item.id, { done: e.target.checked }) }),
     el('div', { class: 'body' }, el('button', { type: 'button', class: 'title', onclick: () => openDetail(item.id) }, item.title), el('div', { class: 'meta' }, meta)),
   );
@@ -275,7 +284,7 @@ function openDetail(id) {
   const item = state.items.find((i) => i.id === id);
   state.detailId = id;
   const dialog = $('#detailDialog');
-  dialog.style.setProperty('--course', courseColor(item.course));
+  dialog.style.setProperty('--course', courseColorOf(item));
   $('#detailCourse').textContent = item.course;
   $('#detailTitle').textContent = item.title;
   const due = item.due ? new Date(item.due) : null;
@@ -356,13 +365,44 @@ async function openSettings() {
   const originals = [...new Set(state.items.map((i) => i.courseOriginal))].sort();
   $('#courseNames').replaceChildren(
     ...(originals.length
-      ? originals.flatMap((original) => [
-          el('span', { class: 'original', style: `--course: ${courseColor(config.courseNames[original] || original)}` }, original),
-          el('input', { 'data-original': original, value: config.courseNames[original] || '', placeholder: original, 'aria-label': `Display name for ${original}` }),
-        ])
+      ? originals.flatMap((original) => courseRow(original, config))
       : [el('small', {}, 'Courses appear here after your first sync.')]),
   );
   $('#settingsDialog').showModal();
+}
+
+// One grid row per course: original name, display-name box, color picker, reset-to-automatic.
+function courseRow(original, config) {
+  const custom = config.courseColors[original];
+  const autoColor = () => autoCourseColor(nameInput.value.trim() || original);
+  const label = el('span', { class: 'original' }, original);
+  const nameInput = el('input', {
+    class: 'course-name',
+    'data-original': original,
+    value: config.courseNames[original] || '',
+    placeholder: original,
+    'aria-label': `Display name for ${original}`,
+  });
+  const colorInput = el('input', {
+    type: 'color',
+    class: 'course-color',
+    'data-original': original,
+    title: 'Course color',
+    'aria-label': `Color for ${original}`,
+  });
+  const reset = el('button', { type: 'button', class: 'reset-color', title: 'Use the automatic color' }, 'Reset');
+  const update = (isCustom, color) => {
+    colorInput.dataset.custom = isCustom ? '1' : '';
+    colorInput.value = color;
+    label.style.setProperty('--course', color);
+    reset.style.visibility = isCustom ? 'visible' : 'hidden';
+  };
+  colorInput.addEventListener('input', () => update(true, colorInput.value));
+  reset.addEventListener('click', () => update(false, autoColor()));
+  // Automatic colors follow the display name, so keep the preview in sync while renaming.
+  nameInput.addEventListener('input', () => colorInput.dataset.custom || update(false, autoColor()));
+  update(Boolean(custom), custom || autoColor());
+  return [label, nameInput, colorInput, reset];
 }
 $('#settingsBtn').addEventListener('click', openSettings);
 $('#settingsForm').addEventListener('submit', async (e) => {
@@ -370,7 +410,11 @@ $('#settingsForm').addEventListener('submit', async (e) => {
   const form = $('#settingsForm').elements;
   const body = { clearCanvasToken: form.clearCanvasToken.checked };
   for (const key of ['canvasBaseUrl', 'canvasToken', 'canvasFeedUrl', 'learningSuiteFeedUrl', 'semesterStart', 'semesterEnd']) body[key] = form[key].value;
-  body.courseNames = Object.fromEntries([...document.querySelectorAll('#courseNames input')].map((input) => [input.dataset.original, input.value]));
+  body.courseNames = Object.fromEntries([...document.querySelectorAll('#courseNames .course-name')].map((input) => [input.dataset.original, input.value]));
+  // Only colors the user picked are saved; '' tells the server to go back to automatic.
+  body.courseColors = Object.fromEntries(
+    [...document.querySelectorAll('#courseNames .course-color')].map((input) => [input.dataset.original, input.dataset.custom ? input.value : '']),
+  );
   await api('/api/config', { method: 'PUT', body });
   load(true);
 });

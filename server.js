@@ -294,6 +294,7 @@ function buildResponse(cache) {
       ...item,
       courseOriginal: item.course,
       course: config.courseNames[item.course] || item.course,
+      courseColor: config.courseColors[item.course] || null,
       done: s.done ?? Boolean(item.submitted),
       hidden: Boolean(s.hidden),
       // A cleared overdue item comes back if its due date has since changed (e.g. an extension).
@@ -438,6 +439,14 @@ async function handleApi(req, res, url) {
         Object.entries({ ...config.courseNames, ...body.courseNames })
           .map(([original, display]) => [original, String(display).trim()])
           .filter(([original, display]) => display && display !== original),
+      );
+    }
+    // Same shape as courseNames; a non-color value (e.g. '') resets that course to its automatic color.
+    if (body.courseColors && typeof body.courseColors === 'object') {
+      config.courseColors = Object.fromEntries(
+        Object.entries({ ...config.courseColors, ...body.courseColors })
+          .filter(([, color]) => ThemeCore.isHex(color))
+          .map(([original, color]) => [original, color.toLowerCase()]),
       );
     }
     // The token is never sent back to the browser; only overwrite it when a new one is typed in.

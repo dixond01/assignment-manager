@@ -207,7 +207,8 @@ legend { font-weight: 600; padding: 0 4px; }
 .row { display: flex; gap: 8px; }
 .row label { flex: 1; }
 
-.course-names { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 6px 10px; align-items: center; }
+.course-names { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto auto; gap: 6px 10px; align-items: center; }
+.course-names .reset-color { padding: 3px 8px; font-size: 12px; }
 .course-names .original { font-size: 13px; color: var(--muted); overflow-wrap: anywhere; }
 .course-names .original::before { content: ""; display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; background: var(--course); }
 #settingsDialog .dialog-body { max-height: calc(100vh - 40px); overflow: auto; }
