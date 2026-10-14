@@ -69,6 +69,9 @@
     root.setAttribute('role', 'dialog');
     root.setAttribute('aria-label', 'Color picker');
     root.innerHTML = `
+      <div class="cp-header" tabindex="0" title="Drag to move" aria-label="Move color picker (drag, or use arrow keys)">
+        <span class="cp-grip" aria-hidden="true">⠿</span><span class="cp-title">Color</span>
+      </div>
       <div class="cp-plane" role="slider" tabindex="0" aria-label="Hue (left to right) and luminosity (top to bottom)">
         <div class="cp-thumb"></div>
       </div>
@@ -103,6 +106,7 @@
     const q = (sel) => root.querySelector(sel);
     ui = {
       root,
+      header: q('.cp-header'),
       plane: q('.cp-plane'),
       planeThumb: q('.cp-plane .cp-thumb'),
       slider: q('.cp-slider'),
@@ -113,6 +117,8 @@
       saved: q('.cp-saved'),
       eyedropper: q('.cp-eyedropper'),
     };
+
+    makeMovable(ui.header);
 
     // Hue gradient: x = hue, y = luminosity (100 at the top, 0 at the bottom).
     drag(ui.plane, (x, y) => {
@@ -305,16 +311,61 @@
     );
   }
 
-  // ---------- open / close ----------
+  // ---------- position ----------
+
+  let movedTo = null; // where the user last dragged the picker; reused on later opens this session
+
+  // Place the picker's top-left corner, kept fully inside the window.
+  function placeAt(left, top) {
+    const { offsetWidth: w, offsetHeight: h } = ui.root;
+    const x = clamp(left, 8, Math.max(8, innerWidth - w - 8));
+    const y = clamp(top, 8, Math.max(8, innerHeight - h - 8));
+    ui.root.style.left = `${x}px`;
+    ui.root.style.top = `${y}px`;
+    return { left: x, top: y };
+  }
 
   function position(anchor) {
+    if (movedTo) return placeAt(movedTo.left, movedTo.top);
     const r = anchor.getBoundingClientRect();
-    const { offsetWidth: w, offsetHeight: h } = ui.root;
+    const h = ui.root.offsetHeight;
     let top = r.bottom + 6;
-    if (top + h > innerHeight - 8) top = Math.max(8, r.top - h - 6); // flip above if it won't fit below
-    ui.root.style.top = `${top}px`;
-    ui.root.style.left = `${clamp(r.left, 8, innerWidth - w - 8)}px`;
+    if (top + h > innerHeight - 8) top = r.top - h - 6; // flip above if it won't fit below
+    placeAt(r.left, top);
   }
+
+  // Drag the picker by its header, or move it with arrow keys when the header is focused.
+  function makeMovable(handle) {
+    handle.addEventListener('pointerdown', (e) => {
+      if (e.button !== 0) return;
+      e.preventDefault();
+      handle.setPointerCapture(e.pointerId);
+      const start = ui.root.getBoundingClientRect();
+      const dx = e.clientX - start.left;
+      const dy = e.clientY - start.top;
+      ui.root.classList.add('cp-dragging');
+      const move = (ev) => (movedTo = placeAt(ev.clientX - dx, ev.clientY - dy));
+      const up = () => {
+        ui.root.classList.remove('cp-dragging');
+        handle.removeEventListener('pointermove', move);
+        handle.removeEventListener('pointerup', up);
+        handle.removeEventListener('pointercancel', up);
+      };
+      handle.addEventListener('pointermove', move);
+      handle.addEventListener('pointerup', up);
+      handle.addEventListener('pointercancel', up);
+    });
+    handle.addEventListener('keydown', (e) => {
+      const step = e.shiftKey ? 50 : 10;
+      const moves = { ArrowLeft: [-step, 0], ArrowRight: [step, 0], ArrowUp: [0, -step], ArrowDown: [0, step] };
+      if (!moves[e.key]) return;
+      e.preventDefault();
+      const r = ui.root.getBoundingClientRect();
+      movedTo = placeAt(r.left + moves[e.key][0], r.top + moves[e.key][1]);
+    });
+  }
+
+  // ---------- open / close ----------
 
   function open(input) {
     if (!ui) build();
