@@ -405,7 +405,12 @@ function serveStatic(res, pathname) {
   if (!file.startsWith(PUBLIC_DIR)) return send(res, 403, 'Forbidden', 'text/plain');
   fs.readFile(file, (err, data) => {
     if (err) return send(res, 404, 'Not found', 'text/plain');
-    res.writeHead(200, { 'Content-Type': MIME[path.extname(file)] || 'application/octet-stream' });
+    if (path.basename(file) === 'index.html') {
+      // Browsers cache favicons by URL, so version the link by the icon's mtime: a regenerated icon gets a new URL.
+      const icon = fs.statSync(path.join(PUBLIC_DIR, 'icon.png'), { throwIfNoEntry: false });
+      if (icon) data = data.toString().replace('href="icon.png"', `href="icon.png?v=${Math.round(icon.mtimeMs)}"`);
+    }
+    res.writeHead(200, { 'Content-Type': MIME[path.extname(file)] || 'application/octet-stream', 'Cache-Control': 'no-cache' });
     res.end(data);
   });
 }
