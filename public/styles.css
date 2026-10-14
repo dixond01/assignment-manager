@@ -153,6 +153,7 @@ main { padding: 0 16px 24px; }
   grid-template-columns: repeat(7, minmax(0, 1fr));
   gap: 8px;
 }
+.week.no-sunday { grid-template-columns: repeat(6, minmax(0, 1fr)); }
 .day {
   background: var(--surface);
   border: 1px solid var(--border);
@@ -173,7 +174,7 @@ main { padding: 0 16px 24px; }
 .day-items { padding: 6px; display: flex; flex-direction: column; gap: 6px; }
 
 @media (max-width: 900px) {
-  .week { grid-template-columns: 1fr; }
+  .week, .week.no-sunday { grid-template-columns: 1fr; }
   .day { min-height: 0; }
 }
 

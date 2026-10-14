@@ -328,8 +328,11 @@ function renderWeek() {
   const end = addDays(start, 7);
   const items = visibleItems().filter((i) => i.due && new Date(i.due) >= start && new Date(i.due) < end).sort(byDue);
   const today = new Date();
+  const sunday = addDays(start, 6);
+  // Hide Sunday when it has nothing to show (and isn't today) so the other days get more room.
+  const showSunday = sameDay(sunday, today) || items.some((i) => sameDay(new Date(i.due), sunday));
 
-  const days = Array.from({ length: 7 }, (_, n) => {
+  const days = Array.from({ length: showSunday ? 7 : 6 }, (_, n) => {
     const day = addDays(start, n);
     const dayItems = items.filter((i) => sameDay(new Date(i.due), day));
     const open = dayItems.filter((i) => !i.done).length;
@@ -340,7 +343,7 @@ function renderWeek() {
       el('div', { class: 'day-items' }, dayItems.map((i) => renderCard(i))),
     );
   });
-  return el('div', {}, renderPager(), el('div', { class: 'week' }, days));
+  return el('div', {}, renderPager(), el('div', { class: `week${showSunday ? '' : ' no-sunday'}` }, days));
 }
 
 function renderList() {
