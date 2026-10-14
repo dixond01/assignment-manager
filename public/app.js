@@ -134,7 +134,16 @@ function renderCourseFilter() {
   select.replaceChildren(el('option', { value: '' }, 'All courses'), ...courses.map((c) => el('option', { value: c }, c)));
   if (!courses.includes(state.course)) state.course = '';
   select.value = state.course;
-  $('#courseList').replaceChildren(...courses.map((c) => el('option', { value: c })));
+}
+
+// One option per displayed course. The value is the course's original name, so a manual item
+// keeps following any later rename; renamed-together courses collapse into one option.
+function courseOptions() {
+  const byDisplay = new Map();
+  for (const item of state.items) {
+    if (item.course !== 'Other' && !byDisplay.has(item.course)) byDisplay.set(item.course, item.courseOriginal);
+  }
+  return [...byDisplay].sort(([a], [b]) => a.localeCompare(b)).map(([display, original]) => ({ display, original }));
 }
 
 function renderStatus() {
@@ -244,11 +253,13 @@ function openDetail(id) {
   dialog.showModal();
 }
 
-$('#detailDialog').addEventListener('close', () => {
+function saveNotes() {
   const item = state.items.find((i) => i.id === state.detailId);
   const notes = $('#detailNotes').value;
   if (item && notes !== item.notes) patchItem(item.id, { notes });
-});
+}
+$('#detailNotes').addEventListener('change', saveNotes);
+$('#detailDialog').addEventListener('close', saveNotes);
 $('#detailHide').addEventListener('click', () => {
   const item = state.items.find((i) => i.id === state.detailId);
   patchItem(item.id, { hidden: !item.hidden });
@@ -265,11 +276,20 @@ $('#detailDelete').addEventListener('click', async () => {
 
 $('#addBtn').addEventListener('click', () => {
   $('#addForm').reset();
-  if (state.course) $('#addForm').elements.course.value = state.course;
+  const options = courseOptions();
+  const select = $('#addForm').elements.course;
+  select.replaceChildren(
+    el('option', { value: '', disabled: true }, 'Choose a course…'),
+    ...options.map((o) => el('option', { value: o.original }, o.display)),
+    el('option', { value: 'Other' }, 'Other (no course)'),
+  );
+  // Preselect the course being filtered on, if any.
+  select.value = options.find((o) => o.display === state.course)?.original ?? '';
   $('#addDialog').showModal();
 });
-$('#addDialog').addEventListener('close', async () => {
-  if ($('#addDialog').returnValue !== 'save') return;
+// Save on submit (fires synchronously on the button click) rather than on the dialog's close event.
+$('#addForm').addEventListener('submit', async (e) => {
+  if (e.submitter?.value !== 'save') return;
   const f = $('#addForm').elements;
   await api('/api/manual', {
     method: 'POST',
@@ -303,8 +323,8 @@ async function openSettings() {
   $('#settingsDialog').showModal();
 }
 $('#settingsBtn').addEventListener('click', openSettings);
-$('#settingsDialog').addEventListener('close', async () => {
-  if ($('#settingsDialog').returnValue !== 'save') return;
+$('#settingsForm').addEventListener('submit', async (e) => {
+  if (e.submitter?.value !== 'save') return;
   const form = $('#settingsForm').elements;
   const body = { clearCanvasToken: form.clearCanvasToken.checked };
   for (const key of ['canvasBaseUrl', 'canvasToken', 'canvasFeedUrl', 'learningSuiteFeedUrl', 'semesterStart', 'semesterEnd']) body[key] = form[key].value;

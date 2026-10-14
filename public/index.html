@@ -4,6 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Assignments</title>
+    <link rel="icon" href="icon.png" />
     <link rel="stylesheet" href="styles.css" />
   </head>
   <body>
@@ -59,8 +60,7 @@
       <form method="dialog" class="dialog-body" id="addForm">
         <h2>Add assignment</h2>
         <label>Title<input name="title" required /></label>
-        <label>Course<input name="course" list="courseList" /></label>
-        <datalist id="courseList"></datalist>
+        <label>Course<select name="course" required></select></label>
         <label>Due<input name="due" type="datetime-local" /></label>
         <label>Link (optional)<input name="url" type="url" /></label>
         <div class="dialog-actions">
