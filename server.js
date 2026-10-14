@@ -531,7 +531,7 @@ async function handleApi(req, res, url) {
       title: body.title.trim(),
       course: body.course?.trim() || 'Other',
       due: body.due || null,
-      allDay: false,
+      allDay: Boolean(body.due && body.allDay),
       url: body.url?.trim() || null,
       description: '',
     };

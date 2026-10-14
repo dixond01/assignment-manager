@@ -117,11 +117,15 @@
         <h2>Add assignment</h2>
         <label>Title<input name="title" required /></label>
         <label>Course<select name="course" required></select></label>
-        <label>Due<input name="due" type="datetime-local" /></label>
+        <div class="row">
+          <label>Due date<input name="dueDate" type="date" /></label>
+          <label>Time (optional)<input name="dueTime" type="time" /></label>
+        </div>
         <label>Link (optional)<input name="url" type="url" /></label>
         <div class="dialog-actions">
           <div class="spacer"></div>
-          <button value="cancel" formnovalidate>Cancel</button>
+          <!-- type="button" so Enter submits with Add (the form's first submit button), not Cancel. -->
+          <button type="button" data-close>Cancel</button>
           <button value="save" class="primary">Add</button>
         </div>
       </form>
@@ -173,7 +177,7 @@
 
         <div class="dialog-actions">
           <div class="spacer"></div>
-          <button value="cancel" formnovalidate>Cancel</button>
+          <button type="button" data-close>Cancel</button>
           <button value="save" class="primary">Save &amp; sync</button>
         </div>
       </form>

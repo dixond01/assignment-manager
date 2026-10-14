@@ -71,6 +71,20 @@ function autoCourseColor(course) {
 // The color shown for an item's course: the user's pick, else the automatic one.
 const courseColorOf = (item) => item.courseColor || autoCourseColor(item.course);
 
+// A color input wrapped as a field: swatch, optional name and hint, and the current hex value.
+function colorField(input, name, hint) {
+  const hex = el('span', { class: 'hex' }, input.value);
+  input.addEventListener('input', () => (hex.textContent = input.value));
+  const text = name && el('span', { class: 'name' }, name, hint && el('span', { class: 'hint' }, hint));
+  return el('label', { class: 'color-field' }, input, text, hex);
+}
+
+// Call after setting a color input's value in code (which fires no input event).
+function syncColorField(input) {
+  const hex = input.closest('.color-field')?.querySelector('.hex');
+  if (hex) hex.textContent = input.value;
+}
+
 async function api(path, options = {}) {
   const res = await fetch(path, {
     ...options,
@@ -327,6 +341,7 @@ $('#detailDelete').addEventListener('click', async () => {
 
 $('#addBtn').addEventListener('click', () => {
   $('#addForm').reset();
+  $('#addForm').elements.dueDate.setCustomValidity('');
   const options = courseOptions();
   const select = $('#addForm').elements.course;
   select.replaceChildren(
@@ -338,21 +353,31 @@ $('#addBtn').addEventListener('click', () => {
   select.value = options.find((o) => o.display === state.course)?.original ?? '';
   $('#addDialog').showModal();
 });
-// Save on submit (fires synchronously on the button click) rather than on the dialog's close event.
+// Save on submit (fires synchronously on the button click or Enter) rather than on the dialog's close event.
 $('#addForm').addEventListener('submit', async (e) => {
   if (e.submitter?.value !== 'save') return;
   const f = $('#addForm').elements;
+  const date = f.dueDate.value;
+  const time = f.dueTime.value;
+  if (time && !date) {
+    e.preventDefault(); // keep the dialog open
+    f.dueDate.setCustomValidity('Pick a date for this time, or clear the time.');
+    f.dueDate.reportValidity();
+    return;
+  }
+  // A date with no time is an all-day item, due at the end of that day (like all-day feed items).
+  const due = date ? new Date(`${date}T${time || '23:59'}`).toISOString() : null;
   await api('/api/manual', {
     method: 'POST',
-    body: {
-      title: f.title.value,
-      course: f.course.value,
-      due: f.due.value ? new Date(f.due.value).toISOString() : null,
-      url: f.url.value,
-    },
+    body: { title: f.title.value, course: f.course.value, due, allDay: Boolean(date && !time), url: f.url.value },
   });
   load();
 });
+$('#addForm').elements.dueDate.addEventListener('input', (e) => e.target.setCustomValidity(''));
+$('#addForm').elements.dueTime.addEventListener('input', () => $('#addForm').elements.dueDate.setCustomValidity(''));
+
+// Cancel buttons are type="button" (so Enter can't trigger them); they just close their dialog.
+document.querySelectorAll('[data-close]').forEach((b) => b.addEventListener('click', () => b.closest('dialog').close()));
 
 async function openSettings() {
   const config = await api('/api/config');
@@ -394,6 +419,7 @@ function courseRow(original, config) {
   const update = (isCustom, color) => {
     colorInput.dataset.custom = isCustom ? '1' : '';
     colorInput.value = color;
+    syncColorField(colorInput);
     label.style.setProperty('--course', color);
     reset.style.visibility = isCustom ? 'visible' : 'hidden';
   };
@@ -401,8 +427,9 @@ function courseRow(original, config) {
   reset.addEventListener('click', () => update(false, autoColor()));
   // Automatic colors follow the display name, so keep the preview in sync while renaming.
   nameInput.addEventListener('input', () => colorInput.dataset.custom || update(false, autoColor()));
+  const field = colorField(colorInput);
   update(Boolean(custom), custom || autoColor());
-  return [label, nameInput, colorInput, reset];
+  return [label, nameInput, field, reset];
 }
 $('#settingsBtn').addEventListener('click', openSettings);
 $('#settingsForm').addEventListener('submit', async (e) => {
@@ -527,9 +554,7 @@ function openThemeEditor(theme) {
   form.themeName.value = theme.name;
   $('#themeColors').replaceChildren(
     ...ThemeCore.COLOR_KEYS.map((key) =>
-      el(
-        'label',
-        {},
+      colorField(
         el('input', {
           type: 'color',
           value: theme.colors[key],
@@ -539,6 +564,7 @@ function openThemeEditor(theme) {
           },
         }),
         ThemeCore.COLOR_LABELS[key],
+        ThemeCore.COLOR_HINTS[key],
       ),
     ),
   );

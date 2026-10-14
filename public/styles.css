@@ -4,6 +4,7 @@
   --bg: #f6f7f9;
   --surface: #ffffff;
   --surface-2: #eceef2;
+  --field: #f6f6f6;
   --border: #dddede;
   --text: #1c2026;
   --muted: #77797d;
@@ -24,6 +25,7 @@
     --bg: #15181c;
     --surface: #1e2227;
     --surface-2: #2c3138;
+    --field: #262a2f;
     --border: #3c4044;
     --text: #e6e8eb;
     --muted: #96999d;
@@ -196,13 +198,13 @@ dialog::backdrop { background: rgb(0 0 0 / 0.4); }
 .dialog-body label { display: flex; flex-direction: column; gap: 3px; font-size: 13px; }
 .dialog-body label.check { flex-direction: row; }
 .dialog-body input:not([type="checkbox"]), .dialog-body textarea {
-  background: var(--bg);
+  background: var(--field);
   border: 1px solid var(--border);
   border-radius: 6px;
   padding: 6px 8px;
   width: 100%;
 }
-.dialog-body select { width: 100%; background: var(--bg); }
+.dialog-body select { width: 100%; background: var(--field); }
 .dialog-body small { color: var(--muted); font-size: 12px; }
 .dialog-actions { display: flex; gap: 8px; margin-top: 6px; }
 fieldset { border: 1px solid var(--border); border-radius: 8px; display: flex; flex-direction: column; gap: 8px; }
@@ -211,7 +213,9 @@ legend { font-weight: 600; padding: 0 4px; }
 .row label { flex: 1; }
 
 .course-names { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto auto; gap: 6px 10px; align-items: center; }
-.course-names .reset-color { padding: 3px 8px; font-size: 12px; }
+/* Same height as the color field beside it. */
+.course-names .reset-color { height: 32px; padding: 0 10px; font-size: 12px; }
+.dialog-body label.color-field { height: 32px; }
 .course-names .original { font-size: 13px; color: var(--muted); overflow-wrap: anywhere; }
 .course-names .original::before { content: ""; display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; background: var(--course); }
 #settingsDialog .dialog-body { max-height: calc(100vh - 40px); overflow: auto; }
@@ -235,9 +239,45 @@ legend { font-weight: 600; padding: 0 4px; }
 .swatches span { width: 12px; height: 20px; }
 .theme-row button { padding: 3px 8px; font-size: 12px; }
 .badge.active-badge { color: var(--accent); }
-.color-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px 12px; }
-.color-grid label { flex-direction: row !important; align-items: center; gap: 8px !important; }
-.dialog-body input[type="color"] { width: 40px; height: 28px; padding: 0 2px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface); cursor: pointer; flex: none; }
+/* The Themes dialog's two views get the same vertical rhythm as .dialog-body. */
+#themeListView, #themeEditor { display: flex; flex-direction: column; gap: 10px; }
+.color-grid { display: flex; flex-direction: column; gap: 6px; margin-top: 6px; }
+
+/* Color picker styled as a field like the app's text inputs: swatch, optional name, and hex value. */
+.dialog-body label.color-field {
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+  padding: 3px 8px 3px 4px;
+  background: var(--field);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  cursor: pointer;
+  min-width: 0;
+}
+.dialog-body label.color-field:hover { border-color: var(--muted); }
+.dialog-body label.color-field:focus-within { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+.color-field .name { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.color-field .hint { color: var(--muted); margin-left: 6px; }
+.color-field .hint::before { content: "· "; }
+.color-field .hex { margin-left: auto; font: 12px ui-monospace, "Cascadia Mono", Consolas, monospace; color: var(--muted); text-transform: uppercase; }
+.dialog-body .color-field input[type="color"] {
+  -webkit-appearance: none;
+  appearance: none;
+  flex: none;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  /* Derived from the text color so the swatch stays visible even when it matches the field. */
+  border: 1px solid color-mix(in srgb, var(--text) 25%, transparent);
+  border-radius: 5px;
+  background: none;
+  cursor: pointer;
+}
+.color-field input[type="color"]:focus { outline: none; }
+.color-field input[type="color"]::-webkit-color-swatch-wrapper { padding: 0; }
+.color-field input[type="color"]::-webkit-color-swatch { border: none; border-radius: 4px; }
+.color-field input[type="color"]::-moz-color-swatch { border: none; border-radius: 4px; }
 .warning { color: var(--warn) !important; }
 
 .detail-course { font-size: 12px; font-weight: 600; color: var(--course, var(--muted)); }

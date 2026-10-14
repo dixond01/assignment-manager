@@ -8,11 +8,21 @@
 
   const COLOR_LABELS = {
     background: 'Background',
-    surface: 'Surface (cards, planner page)',
+    surface: 'Surface',
     text: 'Text',
-    primary: 'Primary (buttons, outlines)',
-    secondary: 'Secondary (today, sparkles)',
-    tertiary: 'Tertiary (soft fills)',
+    primary: 'Primary',
+    secondary: 'Secondary',
+    tertiary: 'Tertiary',
+  };
+
+  // Where each color shows up, for the theme editor.
+  const COLOR_HINTS = {
+    background: 'page behind everything',
+    surface: 'cards, dialogs, planner page',
+    text: 'all text',
+    primary: 'buttons, checkboxes, outlines',
+    secondary: 'today, sparkles',
+    tertiary: 'soft fills, done items',
   };
 
   const LIGHT = { background: '#f6f7f9', surface: '#ffffff', text: '#1c2026', primary: '#0b5fff', secondary: '#f2b705', tertiary: '#d5dae1' };
@@ -66,6 +76,8 @@
       '--bg': colors.background,
       '--surface': colors.surface,
       '--surface-2': mix(colors.surface, colors.tertiary, 0.45),
+      // Input fields sit on the surface (dialogs), so tint the surface rather than using the background.
+      '--field': mix(colors.surface, colors.text, 0.04),
       '--border': mix(colors.surface, colors.text, 0.15),
       '--text': colors.text,
       '--muted': mix(colors.text, colors.surface, 0.4),
@@ -105,6 +117,7 @@
   return {
     COLOR_KEYS,
     COLOR_LABELS,
+    COLOR_HINTS,
     BUILTIN_THEMES,
     DEFAULT_THEME_ID,
     VAR_NAMES,
