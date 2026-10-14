@@ -170,6 +170,20 @@ main { padding: 0 16px 24px; }
 }
 .card .title:hover { text-decoration: underline; background: none; }
 .card .meta { font-size: 12px; color: var(--muted); display: flex; flex-wrap: wrap; gap: 4px 8px; }
+.card { position: relative; }
+/* Log-time button: only visible while hovering or focused, so cards look unchanged otherwise. */
+.card .log-btn {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  padding: 1px 5px;
+  font-size: 12px;
+  line-height: 1.3;
+  color: var(--muted);
+  opacity: 0;
+}
+.card:hover .log-btn, .card:focus-within .log-btn { opacity: 1; }
+.card .time-chip { color: var(--accent); white-space: nowrap; }
 .card.done .title { text-decoration: line-through; color: var(--muted); }
 .card.done { opacity: 0.65; background: var(--done-bg); }
 .card.hidden-item { opacity: 0.4; border-style: dashed; }
@@ -410,3 +424,108 @@ legend { font-weight: 600; padding: 0 4px; }
 .detail-description { white-space: pre-wrap; font-size: 13px; max-height: 200px; overflow: auto; color: var(--muted); }
 .detail-description:empty { display: none; }
 #detailLink { color: var(--accent); }
+
+/* ---------- time tracking ---------- */
+
+body.view-time .assignments-only { display: none !important; }
+
+.chips { display: flex; gap: 6px; flex-wrap: wrap; }
+.chips button { padding: 2px 9px; font-size: 12px; border-radius: 12px; }
+
+/* Quick "Log time" popover (app.js openLogPopover). */
+.log-popover {
+  position: fixed;
+  inset: auto;
+  margin: 0;
+  width: 290px;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  background: var(--surface);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  box-shadow: 0 10px 30px rgb(0 0 0 / 0.18), 0 2px 6px rgb(0 0 0 / 0.08);
+  font-size: 13px;
+}
+.log-popover:not(:popover-open) { display: none; }
+.log-popover .pop-title { font-weight: 600; }
+.log-popover .pop-sub { color: var(--muted); font-size: 12px; margin-top: -6px; overflow-wrap: anywhere; }
+.log-popover .duration { display: flex; gap: 6px; }
+.log-popover .unit, .log-popover input[type="date"] {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  height: 30px;
+  padding: 0 8px;
+  background: var(--field);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--muted);
+}
+.log-popover .unit:focus-within, .log-popover input[type="date"]:focus { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); outline: none; }
+.log-popover .unit input { width: 34px; border: none; background: none; color: var(--text); text-align: right; outline: none; padding: 0; -moz-appearance: textfield; }
+.log-popover .unit input::-webkit-inner-spin-button, .log-popover .unit input::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+.log-popover input[type="date"] { flex: 1; min-width: 0; color: var(--text); }
+.log-popover .pop-actions { display: flex; gap: 8px; align-items: center; }
+.log-popover small { color: var(--muted); font-size: 12px; }
+
+/* Details dialog: time spent on this assignment. */
+.time-section { border-top: 1px solid var(--border); padding-top: 10px; display: flex; flex-direction: column; gap: 4px; }
+.time-section-head { display: flex; align-items: center; gap: 8px; font-size: 13px; }
+.time-total { color: var(--accent); font-weight: 600; }
+.time-total.none { color: var(--muted); font-weight: 400; }
+.time-section-entry { display: flex; gap: 8px; font-size: 12px; color: var(--muted); }
+.time-section-entry .note { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.time-section-entry .dur { margin-left: auto; color: var(--text); white-space: nowrap; }
+
+/* Time view */
+.time-view { display: flex; flex-direction: column; gap: 12px; max-width: 1100px; padding-top: 4px; }
+.time-head { display: flex; align-items: center; gap: 8px; margin-top: 4px; }
+.time-head h2 { font-size: 14px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); margin: 0; }
+.tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 8px; }
+.tile {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-top: 4px solid var(--course);
+  border-radius: var(--radius);
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.tile .course { font-weight: 600; overflow-wrap: anywhere; }
+.tile .avg { font-size: 26px; font-weight: 600; line-height: 1.15; margin-top: 4px; font-variant-numeric: tabular-nums; }
+.tile .avg small { font-size: 13px; font-weight: 400; color: var(--muted); }
+.tile .sub { font-size: 12px; color: var(--muted); display: flex; justify-content: space-between; gap: 8px; }
+.tile .sub b { color: var(--text); font-weight: 500; }
+
+.table-wrap { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); overflow: auto; }
+table.weeks { border-collapse: collapse; width: 100%; font-variant-numeric: tabular-nums; }
+.weeks th, .weeks td { padding: 6px 12px; text-align: right; border-bottom: 1px solid var(--border); white-space: nowrap; }
+.weeks th:first-child, .weeks td:first-child { text-align: left; }
+.weeks thead th { font-size: 12px; font-weight: 600; color: var(--muted); }
+.weeks thead .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; background: var(--course); }
+.weeks tbody tr { cursor: pointer; }
+.weeks tbody tr:hover td { background: var(--surface-2); }
+.weeks td.cell { position: relative; }
+.weeks td.cell .bar { position: absolute; inset: 3px 4px; border-radius: 4px; background: var(--course); opacity: var(--a); }
+.weeks td.cell .v { position: relative; }
+.weeks td.zero { color: var(--muted); }
+.weeks .total { font-weight: 600; border-left: 1px solid var(--border); }
+.weeks tr.current td { background: var(--today); }
+.weeks tr.selected td:first-child { box-shadow: inset 3px 0 var(--accent); font-weight: 600; }
+.weeks .wk { color: var(--muted); font-size: 12px; margin-left: 6px; font-weight: 400; }
+.weeks tfoot td { font-weight: 600; border-bottom: none; border-top: 2px solid var(--border); }
+.weeks tfoot td:first-child small { display: block; font-weight: 400; color: var(--muted); font-size: 11px; }
+
+.entries { display: flex; flex-direction: column; gap: 6px; max-width: 760px; }
+.entry { display: flex; align-items: center; gap: 10px; padding: 6px 8px; background: var(--surface); border: 1px solid var(--border); border-left: 4px solid var(--course, var(--border)); border-radius: 6px; }
+.entry .when { width: 92px; font-size: 12px; color: var(--muted); flex: none; }
+.entry .what { flex: 1; min-width: 0; }
+.entry .t { font-weight: 500; overflow-wrap: anywhere; }
+.entry .m { font-size: 12px; color: var(--muted); overflow-wrap: anywhere; }
+.entry .dur { font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.entry button { padding: 2px 8px; font-size: 12px; }
+.empty.small { padding: 12px 0; text-align: left; }

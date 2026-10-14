@@ -53,7 +53,7 @@ function writeJson(file, value) {
 }
 
 const loadConfig = () => ({ ...structuredClone(DEFAULT_CONFIG), ...readJson(CONFIG_PATH, {}) });
-const loadState = () => ({ items: {}, manual: [], ...readJson(STATE_PATH, {}) });
+const loadState = () => ({ items: {}, manual: [], timeLog: [], ...readJson(STATE_PATH, {}) });
 const loadCache = () => ({ sources: {}, ...readJson(CACHE_PATH, {}) });
 
 // ---------- iCal parsing ----------
@@ -307,8 +307,18 @@ function buildResponse(cache) {
     };
   });
 
+  // Time entries are keyed by the original course name too, so they follow renames and colors.
+  const timeLog = state.timeLog.map((entry) => ({
+    ...entry,
+    courseOriginal: entry.course,
+    course: config.courseNames[entry.course] || entry.course,
+    courseColor: config.courseColors[entry.course] || null,
+  }));
+
   return {
     items,
+    timeLog,
+    semester: { start: config.semesterStart, end: config.semesterEnd },
     sources: Object.fromEntries(
       Object.entries(cache.sources).map(([name, s]) => [name, { fetchedAt: s.fetchedAt, error: s.error, count: s.items.length }]),
     ),
@@ -376,6 +386,28 @@ function applyItemChanges(entry, body) {
     delete entry.dismissedDue;
   }
   return entry;
+}
+
+// A time entry from a request body: { course, date: 'YYYY-MM-DD', minutes, itemId?, itemTitle?, note? }.
+// Returns { entry } or { error }. itemTitle is a snapshot so the entry still reads well if the
+// assignment later drops out of its feed.
+function cleanTimeEntry(body) {
+  const course = typeof body.course === 'string' ? body.course.trim() : '';
+  const minutes = Math.round(Number(body.minutes));
+  if (!course) return { error: 'Choose a course.' };
+  if (typeof body.date !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(body.date)) return { error: 'Choose a date.' };
+  if (!Number.isFinite(minutes) || minutes < 1 || minutes > 24 * 60) return { error: 'Enter between 1 minute and 24 hours.' };
+  const itemId = typeof body.itemId === 'string' && body.itemId ? body.itemId : null;
+  return {
+    entry: {
+      course,
+      date: body.date,
+      minutes,
+      itemId,
+      itemTitle: itemId && typeof body.itemTitle === 'string' ? body.itemTitle.trim() : '',
+      note: typeof body.note === 'string' ? body.note.trim() : '',
+    },
+  };
 }
 
 function publicConfig(config) {
@@ -597,6 +629,34 @@ async function handleApi(req, res, url) {
     delete state.items[id];
     writeJson(STATE_PATH, state);
     return send(res, 204, '', 'text/plain');
+  }
+
+  if (pathname === '/api/time' && method === 'POST') {
+    const { entry, error } = cleanTimeEntry(await readBody(req));
+    if (error) return send(res, 400, { error });
+    const state = loadState();
+    const saved = { id: `time:${crypto.randomUUID()}`, ...entry, createdAt: new Date().toISOString() };
+    state.timeLog.push(saved);
+    writeJson(STATE_PATH, state);
+    return send(res, 201, saved);
+  }
+
+  const timeMatch = pathname.match(/^\/api\/time\/(.+)$/);
+  if (timeMatch && (method === 'PUT' || method === 'DELETE')) {
+    const id = decodeURIComponent(timeMatch[1]);
+    const state = loadState();
+    const index = state.timeLog.findIndex((t) => t.id === id);
+    if (index < 0) return send(res, 404, { error: 'No such time entry.' });
+    if (method === 'DELETE') {
+      state.timeLog.splice(index, 1);
+      writeJson(STATE_PATH, state);
+      return send(res, 204, '', 'text/plain');
+    }
+    const { entry, error } = cleanTimeEntry(await readBody(req));
+    if (error) return send(res, 400, { error });
+    state.timeLog[index] = { ...state.timeLog[index], ...entry };
+    writeJson(STATE_PATH, state);
+    return send(res, 200, state.timeLog[index]);
   }
 
   send(res, 404, { error: 'Not found' });

@@ -23,6 +23,7 @@
       <div class="segmented" role="tablist" aria-label="View">
         <button type="button" data-view="week" role="tab">Week</button>
         <button type="button" data-view="list" role="tab">List</button>
+        <button type="button" data-view="time" role="tab">Time</button>
       </div>
 
       <div class="week-nav" id="weekNav">
@@ -35,13 +36,14 @@
       <div class="spacer"></div>
 
       <select id="courseFilter" aria-label="Filter by course"></select>
-      <label class="check"><input type="checkbox" id="showDone" /> Show done</label>
-      <label class="check"><input type="checkbox" id="showHidden" /> Show hidden</label>
+      <!-- .assignments-only controls are hidden in the Time view. -->
+      <label class="check assignments-only"><input type="checkbox" id="showDone" /> Show done</label>
+      <label class="check assignments-only"><input type="checkbox" id="showHidden" /> Show hidden</label>
 
-      <button type="button" id="clearOverdueBtn" hidden></button>
-      <button type="button" id="clearedBtn" hidden></button>
-      <button type="button" id="refreshBtn">Refresh</button>
-      <button type="button" id="addBtn" class="primary">+ Add</button>
+      <button type="button" id="clearOverdueBtn" class="assignments-only" hidden></button>
+      <button type="button" id="clearedBtn" class="assignments-only" hidden></button>
+      <button type="button" id="refreshBtn" class="assignments-only">Refresh</button>
+      <button type="button" id="addBtn" class="primary assignments-only">+ Add</button>
       <button type="button" id="themesBtn" class="icon-btn" aria-label="Themes" title="Themes">🎨</button>
       <button type="button" id="settingsBtn" class="icon-btn" aria-label="Settings" title="Settings">⚙</button>
     </header>
@@ -71,6 +73,15 @@
         <a id="detailLink" target="_blank" rel="noopener">Open in LMS ↗</a>
         <div id="detailDescription" class="detail-description"></div>
         <label>Notes<textarea id="detailNotes" rows="4"></textarea></label>
+        <div class="time-section">
+          <div class="time-section-head">
+            <b>Time spent</b>
+            <span id="detailTimeTotal" class="time-total"></span>
+            <div class="spacer"></div>
+            <button type="button" id="detailLogTime">⏱ Log time</button>
+          </div>
+          <div id="detailTimeEntries" class="time-section-entries"></div>
+        </div>
         <div class="dialog-actions">
           <button type="button" id="detailHide"></button>
           <button type="button" id="detailDelete" class="danger">Delete</button>
@@ -140,6 +151,28 @@
           <!-- type="button" so Enter submits with Add (the form's first submit button), not Cancel. -->
           <button type="button" data-close>Cancel</button>
           <button value="save" class="primary">Add</button>
+        </div>
+      </form>
+    </dialog>
+
+    <!-- Log time (study time, or editing an entry) -->
+    <dialog id="timeDialog">
+      <form method="dialog" class="dialog-body" id="timeForm">
+        <h2 id="timeDialogTitle">Log time</h2>
+        <label>Course<select name="course" required></select></label>
+        <div class="row">
+          <label>Date<input name="date" type="date" required /></label>
+          <label>Hours<input name="hours" type="number" min="0" max="24" step="1" inputmode="numeric" /></label>
+          <label>Minutes<input name="minutes" type="number" min="0" max="59" step="1" inputmode="numeric" /></label>
+        </div>
+        <div class="chips" id="timeChips"></div>
+        <label>Assignment (optional)<select name="itemId"></select></label>
+        <label>Note (optional)<input name="note" maxlength="200" /></label>
+        <small id="timeError" class="warning" hidden></small>
+        <div class="dialog-actions">
+          <div class="spacer"></div>
+          <button type="button" data-close>Cancel</button>
+          <button value="save" class="primary" id="timeSaveBtn">Log time</button>
         </div>
       </form>
     </dialog>

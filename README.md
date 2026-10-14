@@ -23,6 +23,14 @@ Click ⚙ (Settings):
 
 Sources sync when you open the page if the last sync is over an hour old. **Refresh** forces a sync.
 
+## Time tracking
+
+- **Time on an assignment:** hover a card and click its ⏱ button (or use **⏱ Log time** in the assignment's details). Pick +15m/+30m/+1h/+2h or type hours and minutes. Enter logs it. Checking an assignment off never asks about time. Logged time shows on the card (for example ⏱ 1h 30m).
+- **Other study time:** the **Time** tab → **+ Log time**. Choose the course and date, and optionally an assignment and a note.
+- **The Time tab** shows each course's average hours per week, this week's hours, and the total. Below that is a week-by-week table (click a week to see and edit its entries).
+- **Averages** cover only finished Monday–Sunday weeks since your semester start date. Weeks with no time count as zero. The current week is added once it ends.
+- **Copy report** copies each course's weekly average as plain text, for end-of-semester reporting.
+
 ## Themes and course colors
 
 Click 🎨 (Themes) to switch themes. Built in: **System** (the default; follows Windows light/dark), **Light**, **Dark**, and **BYU**. **Duplicate** or **New theme** opens an editor with six colors (background, surface, text, primary, secondary, tertiary) that previews live. You can edit and delete your own themes, but not the one you're currently using.
@@ -33,7 +41,7 @@ Course colors are set in ⚙ Settings → **Course names**: pick a color, or **R
 
 ## How it works
 
-- `server.js`: a zero-dependency Node server. It fetches the feeds and the Canvas API, caches the results in `data/cache.json`, and stores your checkmarks, notes, hidden items, and manual assignments in `data/state.json`.
+- `server.js`: a zero-dependency Node server. It fetches the feeds and the Canvas API, caches the results in `data/cache.json`, and stores your checkmarks, notes, hidden items, manual assignments, and logged time in `data/state.json`.
 - `public/`: the front end (plain HTML/CSS/JS). `theme-core.js` (themes and color math) and `icon-core.js` (icon drawing) are shared with the server.
 - `lib/icon-file.js`: encodes the icon as PNG and Windows `.ico`.
 - `tools/make_icon.js`: regenerates the fallback `public/icon.ico` / `icon.png` (`node tools/make_icon.js [themeId]`).
