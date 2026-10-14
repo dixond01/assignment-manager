@@ -6,6 +6,13 @@
     <title>Assignments</title>
     <link rel="icon" href="icon.png" />
     <link rel="stylesheet" href="styles.css" />
+    <script>
+      // Apply the last-used theme before first paint so there's no flash of the default colors.
+      try {
+        const vars = JSON.parse(localStorage.getItem('themeVars'));
+        if (vars) for (const name in vars) document.documentElement.style.setProperty(name, vars[name]);
+      } catch {}
+    </script>
   </head>
   <body>
     <header class="toolbar">
@@ -33,7 +40,8 @@
       <button type="button" id="clearedBtn" hidden></button>
       <button type="button" id="refreshBtn">Refresh</button>
       <button type="button" id="addBtn" class="primary">+ Add</button>
-      <button type="button" id="settingsBtn" aria-label="Settings">⚙</button>
+      <button type="button" id="themesBtn" class="icon-btn" aria-label="Themes" title="Themes">🎨</button>
+      <button type="button" id="settingsBtn" class="icon-btn" aria-label="Settings" title="Settings">⚙</button>
     </header>
 
     <div id="status" class="status"></div>
@@ -53,6 +61,36 @@
           <button type="button" id="detailDelete" class="danger">Delete</button>
           <div class="spacer"></div>
           <button value="close" class="primary">Done</button>
+        </div>
+      </form>
+    </dialog>
+
+    <!-- Themes -->
+    <dialog id="themesDialog">
+      <form method="dialog" class="dialog-body" id="themesForm">
+        <h2 id="themesTitle">Themes</h2>
+
+        <div id="themeListView">
+          <small>Click a theme to switch to it.</small>
+          <div id="themeList" class="theme-list"></div>
+          <div class="dialog-actions">
+            <button type="button" id="newThemeBtn">New theme</button>
+            <div class="spacer"></div>
+            <button value="close" class="primary">Done</button>
+          </div>
+        </div>
+
+        <div id="themeEditor" hidden>
+          <label>Name<input name="themeName" maxlength="40" /></label>
+          <div id="themeColors" class="color-grid"></div>
+          <small>Changes preview live across the app.</small>
+          <small id="themeWarnings" class="warning" hidden></small>
+          <small id="themeError" class="warning" hidden></small>
+          <div class="dialog-actions">
+            <button type="button" id="themeCancelBtn">Cancel</button>
+            <div class="spacer"></div>
+            <button type="button" id="themeSaveBtn" class="primary">Save theme</button>
+          </div>
         </div>
       </form>
     </dialog>
@@ -139,6 +177,7 @@
       </form>
     </dialog>
 
+    <script src="theme-core.js"></script>
     <script src="app.js"></script>
   </body>
 </html>

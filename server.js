@@ -6,6 +6,7 @@ const http = require('http');
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
+const ThemeCore = require('./public/theme-core.js');
 
 const PORT = Number(process.env.PORT) || 3456;
 const HOST = '127.0.0.1'; // local only — config.json holds your Canvas token
@@ -25,6 +26,9 @@ const DEFAULT_CONFIG = {
   semesterStart: '2026-08-31',
   semesterEnd: '2026-12-19',
   courseNames: {}, // original course name -> display name
+  courseColors: {}, // original course name -> #rrggbb
+  themes: [], // user-created themes: { id, name, colors }
+  activeThemeId: ThemeCore.DEFAULT_THEME_ID,
 };
 
 // ---------- storage ----------
@@ -44,7 +48,7 @@ function writeJson(file, value) {
   fs.renameSync(tmp, file);
 }
 
-const loadConfig = () => ({ ...DEFAULT_CONFIG, ...readJson(CONFIG_PATH, {}) });
+const loadConfig = () => ({ ...structuredClone(DEFAULT_CONFIG), ...readJson(CONFIG_PATH, {}) });
 const loadState = () => ({ items: {}, manual: [], ...readJson(STATE_PATH, {}) });
 const loadCache = () => ({ sources: {}, ...readJson(CACHE_PATH, {}) });
 
@@ -337,8 +341,76 @@ function applyItemChanges(entry, body) {
 }
 
 function publicConfig(config) {
-  const { canvasToken, ...rest } = config;
+  const { canvasToken, themes, activeThemeId, ...rest } = config;
   return { ...rest, hasCanvasToken: Boolean(canvasToken) };
+}
+
+// ---------- themes ----------
+
+const allThemes = (config) => [...ThemeCore.BUILTIN_THEMES, ...config.themes];
+const findTheme = (config, id) => allThemes(config).find((t) => t.id === id);
+
+function themesResponse(config) {
+  const active = findTheme(config, config.activeThemeId) ? config.activeThemeId : ThemeCore.DEFAULT_THEME_ID;
+  return { themes: allThemes(config), activeThemeId: active };
+}
+
+function cleanTheme(body) {
+  return {
+    name: body.name.trim(),
+    colors: Object.fromEntries(ThemeCore.COLOR_KEYS.map((key) => [key, body.colors[key].toLowerCase()])),
+  };
+}
+
+async function handleThemes(req, res, pathname, method) {
+  const config = loadConfig();
+
+  if (pathname === '/api/themes' && method === 'GET') return send(res, 200, themesResponse(config));
+
+  if (pathname === '/api/themes' && method === 'POST') {
+    const body = await readBody(req);
+    const error = ThemeCore.validateTheme(body);
+    if (error) return send(res, 400, { error });
+    const theme = { id: `theme-${crypto.randomUUID().slice(0, 8)}`, ...cleanTheme(body) };
+    config.themes.push(theme);
+    writeJson(CONFIG_PATH, config);
+    return send(res, 201, theme);
+  }
+
+  if (pathname === '/api/active-theme' && method === 'PUT') {
+    const { id } = await readBody(req);
+    if (!findTheme(config, id)) return send(res, 404, { error: 'No such theme.' });
+    config.activeThemeId = id;
+    writeJson(CONFIG_PATH, config);
+    return send(res, 200, themesResponse(config));
+  }
+
+  const match = pathname.match(/^\/api\/themes\/([^/]+)$/);
+  if (!match) return false;
+  const id = decodeURIComponent(match[1]);
+  const theme = findTheme(config, id);
+  if (!theme) return send(res, 404, { error: 'No such theme.' });
+  if (theme.builtIn) return send(res, 400, { error: 'Built-in themes can’t be changed. Duplicate it instead.' });
+
+  if (method === 'PUT') {
+    const body = await readBody(req);
+    const error = ThemeCore.validateTheme(body);
+    if (error) return send(res, 400, { error });
+    Object.assign(theme, cleanTheme(body));
+    writeJson(CONFIG_PATH, config);
+    return send(res, 200, theme);
+  }
+
+  if (method === 'DELETE') {
+    if (themesResponse(config).activeThemeId === id) {
+      return send(res, 409, { error: 'Switch to another theme before deleting this one.' });
+    }
+    config.themes = config.themes.filter((t) => t.id !== id);
+    writeJson(CONFIG_PATH, config);
+    return send(res, 204, '', 'text/plain');
+  }
+
+  return false;
 }
 
 async function handleApi(req, res, url) {
@@ -347,6 +419,10 @@ async function handleApi(req, res, url) {
 
   if (pathname === '/api/assignments' && method === 'GET') {
     return send(res, 200, buildResponse(await sync({ force: url.searchParams.get('refresh') === '1' })));
+  }
+
+  if (pathname.startsWith('/api/themes') || pathname === '/api/active-theme') {
+    if ((await handleThemes(req, res, pathname, method)) !== false) return;
   }
 
   if (pathname === '/api/config' && method === 'GET') return send(res, 200, publicConfig(loadConfig()));

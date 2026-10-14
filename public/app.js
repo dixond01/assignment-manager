@@ -375,6 +375,181 @@ $('#settingsForm').addEventListener('submit', async (e) => {
   load(true);
 });
 
+// ---------- themes ----------
+
+const themeState = { themes: ThemeCore.BUILTIN_THEMES, activeThemeId: ThemeCore.DEFAULT_THEME_ID, editing: null };
+const prefersDark = window.matchMedia('(prefers-color-scheme: dark)');
+
+const activeTheme = () => themeState.themes.find((t) => t.id === themeState.activeThemeId) || ThemeCore.BUILTIN_THEMES[0];
+
+// Inline variables override the stylesheet. System clears them so the stylesheet's light/dark rules apply.
+function applyColors(colors) {
+  const style = document.documentElement.style;
+  for (const name of ThemeCore.VAR_NAMES) style.removeProperty(name);
+  const vars = colors ? ThemeCore.themeVars(colors) : null;
+  if (vars) for (const [name, value] of Object.entries(vars)) style.setProperty(name, value);
+  return vars;
+}
+
+function applyActiveTheme() {
+  const vars = applyColors(activeTheme().colors);
+  try {
+    if (vars) localStorage.setItem('themeVars', JSON.stringify(vars));
+    else localStorage.removeItem('themeVars');
+  } catch {}
+}
+
+async function loadThemes() {
+  try {
+    Object.assign(themeState, await api('/api/themes'));
+  } catch {
+    // Keep whatever the page already shows.
+  }
+  applyActiveTheme();
+}
+
+async function switchTheme(id) {
+  themeState.activeThemeId = id;
+  applyActiveTheme();
+  renderThemeList();
+  Object.assign(themeState, await api('/api/active-theme', { method: 'PUT', body: { id } }));
+}
+
+function renderThemeList() {
+  $('#themeList').replaceChildren(
+    ...themeState.themes.map((theme) => {
+      const colors = ThemeCore.resolveColors(theme, prefersDark.matches);
+      const active = theme.id === themeState.activeThemeId;
+      const choose = () => active || switchTheme(theme.id);
+      const action = (label, fn, props = {}) =>
+        el('button', { type: 'button', ...props, onclick: (e) => (e.stopPropagation(), fn()) }, label);
+      return el(
+        'div',
+        {
+          class: `theme-row${active ? ' active' : ''}`,
+          role: 'button',
+          tabindex: 0,
+          'aria-pressed': String(active),
+          onclick: choose,
+          onkeydown: (e) => (e.key === 'Enter' || e.key === ' ') && (e.preventDefault(), choose()),
+        },
+        el('span', { class: 'swatches' }, ThemeCore.COLOR_KEYS.map((key) => el('span', { style: `background: ${colors[key]}`, title: ThemeCore.COLOR_LABELS[key] }))),
+        el(
+          'div',
+          { class: 'name' },
+          theme.name,
+          el('small', {}, theme.id === 'system' ? 'Built in · follows Windows light/dark' : theme.builtIn ? 'Built in' : 'Your theme'),
+        ),
+        active && el('span', { class: 'badge active-badge' }, 'Active'),
+        action('Duplicate', () => openThemeEditor({ name: `${theme.name} copy`, colors: { ...colors } })),
+        !theme.builtIn && action('Edit', () => openThemeEditor(theme)),
+        !theme.builtIn &&
+          action('Delete', () => deleteTheme(theme), {
+            class: 'danger',
+            disabled: active,
+            title: active ? 'Switch to another theme before deleting this one' : 'Delete this theme',
+          }),
+      );
+    }),
+  );
+}
+
+function showThemeError(message) {
+  $('#themeError').textContent = message;
+  $('#themeError').hidden = !message;
+}
+
+// theme: an existing user theme (has an id) or a draft { name, colors } for a new one.
+function openThemeEditor(theme) {
+  themeState.editing = { id: theme.id || null, colors: { ...theme.colors } };
+  const form = $('#themesForm').elements;
+  form.themeName.value = theme.name;
+  $('#themeColors').replaceChildren(
+    ...ThemeCore.COLOR_KEYS.map((key) =>
+      el(
+        'label',
+        {},
+        el('input', {
+          type: 'color',
+          value: theme.colors[key],
+          oninput: (e) => {
+            themeState.editing.colors[key] = e.target.value;
+            previewEditedTheme();
+          },
+        }),
+        ThemeCore.COLOR_LABELS[key],
+      ),
+    ),
+  );
+  $('#themesTitle').textContent = theme.id ? 'Edit theme' : 'New theme';
+  showThemeError('');
+  $('#themeListView').hidden = true;
+  $('#themeEditor').hidden = false;
+  previewEditedTheme();
+  form.themeName.focus();
+}
+
+function previewEditedTheme() {
+  const { colors } = themeState.editing;
+  applyColors(colors);
+  const warnings = ThemeCore.contrastWarnings(colors);
+  $('#themeWarnings').textContent = warnings.join(' ');
+  $('#themeWarnings').hidden = !warnings.length;
+}
+
+function closeThemeEditor() {
+  themeState.editing = null;
+  applyActiveTheme();
+  $('#themesTitle').textContent = 'Themes';
+  $('#themeEditor').hidden = true;
+  $('#themeListView').hidden = false;
+  renderThemeList();
+}
+
+async function saveEditedTheme() {
+  const { id, colors } = themeState.editing;
+  const body = { name: $('#themesForm').elements.themeName.value, colors };
+  const error = ThemeCore.validateTheme(body);
+  if (error) return showThemeError(error);
+  try {
+    const saved = await api(id ? `/api/themes/${encodeURIComponent(id)}` : '/api/themes', { method: id ? 'PUT' : 'POST', body });
+    Object.assign(themeState, await api('/api/themes'));
+    if (!id) await switchTheme(saved.id); // a new theme becomes the active one
+    closeThemeEditor();
+  } catch (err) {
+    showThemeError(err.message);
+  }
+}
+
+async function deleteTheme(theme) {
+  if (theme.id === themeState.activeThemeId || !confirm(`Delete the theme "${theme.name}"?`)) return;
+  try {
+    await api(`/api/themes/${encodeURIComponent(theme.id)}`, { method: 'DELETE' });
+  } catch (err) {
+    alert(err.message);
+  }
+  Object.assign(themeState, await api('/api/themes'));
+  renderThemeList();
+}
+
+$('#themesBtn').addEventListener('click', () => {
+  renderThemeList();
+  $('#themesDialog').showModal();
+});
+$('#newThemeBtn').addEventListener('click', () => openThemeEditor({ name: 'My theme', colors: { ...ThemeCore.resolveColors(activeTheme(), prefersDark.matches) } }));
+$('#themeCancelBtn').addEventListener('click', closeThemeEditor);
+$('#themeSaveBtn').addEventListener('click', saveEditedTheme);
+// Enter in the name field submits the form; save instead of closing the dialog.
+$('#themesForm').addEventListener('submit', (e) => {
+  if ($('#themeEditor').hidden) return;
+  e.preventDefault();
+  saveEditedTheme();
+});
+// Escape while editing discards the live preview.
+$('#themesDialog').addEventListener('cancel', () => themeState.editing && closeThemeEditor());
+$('#themesDialog').addEventListener('close', () => themeState.editing && closeThemeEditor());
+prefersDark.addEventListener('change', () => $('#themesDialog').open && !themeState.editing && renderThemeList());
+
 // ---------- toolbar ----------
 
 document.querySelectorAll('.segmented button').forEach((b) =>
@@ -420,4 +595,5 @@ document.addEventListener('keydown', (e) => {
   if (e.key === 'ArrowRight') $('#nextWeek').click();
 });
 
+loadThemes();
 load();
