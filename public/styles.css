@@ -94,15 +94,47 @@ button.danger { color: var(--danger); }
 .segmented button:last-child { border-radius: 0 6px 6px 0; border-left: none; }
 .segmented button[aria-selected="true"] { background: var(--accent); border-color: var(--accent); color: var(--accent-text); }
 
-.week-nav { display: inline-flex; align-items: center; gap: 4px; }
-#weekLabel { margin-left: 6px; font-weight: 600; }
+/* Week switcher above the Week grid and the Time view (app.js renderPager). */
+.pager { position: relative; display: flex; align-items: center; justify-content: center; gap: 10px; margin: 10px 0; }
+.pager .arrow { width: 32px; height: 32px; padding: 0; border-radius: 50%; font-size: 18px; line-height: 1; }
+.pager .range { min-width: 190px; text-align: center; font-size: 17px; font-weight: 600; }
+.pager .range small { display: block; font-size: 12px; font-weight: 400; color: var(--muted); }
+.pager .today { position: absolute; right: 0; }
+.pager .today:disabled { opacity: 0.5; cursor: default; }
+.pager .today:disabled:hover { background: var(--surface); }
+
+/* Sync result, bottom center for a few seconds. */
+.toast {
+  position: fixed;
+  left: 50%;
+  bottom: 20px;
+  z-index: 40;
+  transform: translateX(-50%);
+  max-width: min(520px, calc(100vw - 32px));
+  padding: 10px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  background: var(--surface);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: 0 10px 30px rgb(0 0 0 / 0.18), 0 2px 6px rgb(0 0 0 / 0.08);
+  font-size: 13px;
+  animation: toast-in 0.2s ease-out;
+  transition: opacity 0.3s;
+}
+.toast div { color: var(--muted); }
+.toast .error { color: var(--danger); }
+.toast.leaving { opacity: 0; }
+@keyframes toast-in { from { opacity: 0; transform: translate(-50%, 8px); } }
 
 /* Larger glyph buttons (settings gear, themes palette), sized to match neighboring button heights. */
 .icon-btn { font-size: 20px; line-height: 1; padding: 5px 8px; }
 
 .check { display: inline-flex; align-items: center; gap: 4px; color: var(--muted); }
 
-.status { padding: 6px 16px; font-size: 12px; color: var(--muted); }
+.status { padding: 6px 16px 0; font-size: 12px; color: var(--muted); }
 .status .error { color: var(--danger); }
 
 main { padding: 0 16px 24px; }
@@ -481,7 +513,8 @@ body.view-time .assignments-only { display: none !important; }
 .time-section-entry .dur { margin-left: auto; color: var(--text); white-space: nowrap; }
 
 /* Time view */
-.time-view { display: flex; flex-direction: column; gap: 12px; max-width: 1100px; padding-top: 4px; }
+.time-view { display: flex; flex-direction: column; gap: 12px; max-width: 1100px; }
+.time-view .pager { margin-bottom: 0; }
 .time-head { display: flex; align-items: center; gap: 8px; margin-top: 4px; }
 .time-head h2 { font-size: 14px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); margin: 0; }
 .tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 8px; }

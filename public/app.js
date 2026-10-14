@@ -114,20 +114,43 @@ async function api(path, options = {}) {
 
 // ---------- data ----------
 
+// refresh: sync now (the Sync button, saving settings) and report the result in a toast.
 async function load(refresh = false) {
-  $('#refreshBtn').disabled = true;
-  $('#refreshBtn').textContent = 'Syncing…';
+  $('#syncBtn').disabled = true;
+  $('#syncBtn').textContent = 'Syncing…';
   try {
     const data = await api(`/api/assignments${refresh ? '?refresh=1' : ''}`);
     Object.assign(state, data);
+    state.loadError = null;
     indexTime();
   } catch (err) {
     state.loadError = err.message;
   } finally {
-    $('#refreshBtn').disabled = false;
-    $('#refreshBtn').textContent = 'Refresh';
+    $('#syncBtn').disabled = false;
+    $('#syncBtn').textContent = 'Sync';
   }
   render();
+  if (refresh) {
+    const lines = statusLines();
+    showToast(lines.some((l) => l.error) ? 'Sync finished with errors' : 'Synced', lines);
+  }
+}
+
+let toastTimer = null;
+function showToast(title, lines = []) {
+  const toast = $('#toast');
+  const errors = lines.some((l) => l.error);
+  toast.replaceChildren(el('b', {}, title), ...lines.map((l) => el('div', { class: l.error ? 'error' : '' }, l.text)));
+  toast.hidden = false;
+  toast.classList.remove('leaving');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(
+    () => {
+      toast.classList.add('leaving');
+      toastTimer = setTimeout(() => (toast.hidden = true), 300);
+    },
+    errors ? 8000 : 4000,
+  );
 }
 
 function visibleItems() {
@@ -161,7 +184,6 @@ async function patchItem(id, changes) {
 
 function render() {
   document.querySelectorAll('.segmented button').forEach((b) => b.setAttribute('aria-selected', b.dataset.view === state.view));
-  $('#weekNav').hidden = state.view === 'list';
   document.body.classList.toggle('view-time', state.view === 'time');
   $('#showDone').checked = state.showDone;
   $('#showHidden').checked = state.showHidden;
@@ -198,15 +220,25 @@ function courseOptions() {
   return [...byDisplay].sort(([a], [b]) => a.localeCompare(b)).map(([display, original]) => ({ display, original }));
 }
 
-function renderStatus() {
+// One { text, error } line per source, plus a server error if the last load failed.
+function statusLines() {
   const labels = { canvas: 'Canvas', learningsuite: 'Learning Suite' };
-  const parts = Object.entries(state.sources).map(([name, s]) => {
-    if (s.error) return el('span', { class: 'error' }, `${labels[name]}: ${s.error}`);
+  const lines = Object.entries(state.sources).map(([name, s]) => {
+    if (s.error) return { text: `${labels[name]}: ${s.error}`, error: true };
     const when = s.fetchedAt ? `${fmtShort(new Date(s.fetchedAt))} ${fmtTime(new Date(s.fetchedAt))}` : 'never';
-    return el('span', {}, `${labels[name]}: ${s.count} items, synced ${when}`);
+    return { text: `${labels[name]}: ${s.count} items, synced ${when}` };
   });
-  if (state.loadError) parts.push(el('span', { class: 'error' }, `Could not reach server: ${state.loadError}`));
-  $('#status').replaceChildren(...parts.flatMap((p, i) => (i ? [' · ', p] : [p])));
+  if (state.loadError) lines.push({ text: `Could not reach server: ${state.loadError}`, error: true });
+  return lines;
+}
+
+// The sync status lives in the Sync button's tooltip; only errors are shown on the page.
+function renderStatus() {
+  const lines = statusLines();
+  $('#syncBtn').title = lines.length ? lines.map((l) => l.text).join('\n') : 'No sources connected yet';
+  const errors = lines.filter((l) => l.error);
+  $('#status').hidden = !errors.length;
+  $('#status').replaceChildren(...errors.flatMap((l, i) => [i ? ' · ' : '', el('span', { class: 'error' }, l.text)]));
 }
 
 function renderClearButtons() {
@@ -267,12 +299,33 @@ function renderCard(item, { showDate = false } = {}) {
   );
 }
 
-const setWeekLabel = () => ($('#weekLabel').textContent = `${fmtShort(state.weekStart)} – ${fmtShort(addDays(state.weekStart, 6))}`);
+// weeks: how many weeks to move, or 0 for the current week.
+function shiftWeek(weeks) {
+  state.weekStart = weeks ? addDays(state.weekStart, 7 * weeks) : startOfWeek(new Date());
+  render();
+}
+
+// Centered week switcher above the Week grid and the Time view: ‹ date range › and Today.
+function renderPager() {
+  const weeksFrom = (from) => Math.round((state.weekStart - from) / (7 * 864e5)); // round: DST makes some weeks an hour short
+  const offset = weeksFrom(startOfWeek(new Date()));
+  const relative =
+    offset === 0 ? 'this week' : offset === -1 ? 'last week' : offset === 1 ? 'next week' : offset < 0 ? `${-offset} weeks ago` : `in ${offset} weeks`;
+  const { first, total } = semesterWeeks();
+  const n = first ? weeksFrom(first) + 1 : 0;
+  return el(
+    'div',
+    { class: 'pager' },
+    el('button', { type: 'button', class: 'arrow', title: 'Previous week (←)', 'aria-label': 'Previous week', onclick: () => shiftWeek(-1) }, '‹'),
+    el('div', { class: 'range' }, `${fmtShort(state.weekStart)} – ${fmtShort(addDays(state.weekStart, 6))}`, el('small', {}, n >= 1 && n <= total ? `Week ${n} of ${total} · ${relative}` : relative)),
+    el('button', { type: 'button', class: 'arrow', title: 'Next week (→)', 'aria-label': 'Next week', onclick: () => shiftWeek(1) }, '›'),
+    el('button', { type: 'button', class: 'today', disabled: offset === 0, onclick: () => shiftWeek(0) }, 'Today'),
+  );
+}
 
 function renderWeek() {
   const start = state.weekStart;
   const end = addDays(start, 7);
-  setWeekLabel();
   const items = visibleItems().filter((i) => i.due && new Date(i.due) >= start && new Date(i.due) < end).sort(byDue);
   const today = new Date();
 
@@ -287,7 +340,7 @@ function renderWeek() {
       el('div', { class: 'day-items' }, dayItems.map((i) => renderCard(i))),
     );
   });
-  return el('div', { class: 'week' }, days);
+  return el('div', {}, renderPager(), el('div', { class: 'week' }, days));
 }
 
 function renderList() {
@@ -874,7 +927,6 @@ function timeTable() {
 }
 
 function renderTime() {
-  setWeekLabel();
   const table = timeTable();
   const { weeks, complete, courses, get, stats } = table;
   const current = weeks.find((w) => !w.complete);
@@ -884,7 +936,7 @@ function renderTime() {
   if (!table.total) heading = 'Set your semester dates in Settings';
   else if (!weeks.length) heading = `Semester starts ${fmtShort(table.first)}`;
   else if (!current) heading = `Semester ended · ${weeks.length} weeks`;
-  else heading = `Week ${current.n} of ${table.total} · ${fmtShort(table.first)} – ${fmtShort(table.end)}`;
+  else heading = `Semester · ${fmtShort(table.first)} – ${fmtShort(table.end)}`;
 
   const head = el(
     'div',
@@ -895,7 +947,7 @@ function renderTime() {
     el('button', { type: 'button', class: 'primary', onclick: () => openTimeDialog() }, '+ Log time'),
   );
 
-  if (!courses.length) return el('div', { class: 'time-view' }, head, el('div', { class: 'empty' }, 'No courses yet. They appear here after your first sync.'));
+  if (!courses.length) return el('div', { class: 'time-view' }, renderPager(), head, el('div', { class: 'empty' }, 'No courses yet. They appear here after your first sync.'));
 
   const tiles = el(
     'div',
@@ -965,6 +1017,7 @@ function renderTime() {
   return el(
     'div',
     { class: 'time-view' },
+    renderPager(),
     head,
     tiles,
     el('div', { class: 'time-head' }, el('h2', {}, 'Week by week (hours)')),
@@ -1109,9 +1162,6 @@ document.querySelectorAll('.segmented button').forEach((b) =>
     render();
   }),
 );
-$('#prevWeek').addEventListener('click', () => ((state.weekStart = addDays(state.weekStart, -7)), render()));
-$('#nextWeek').addEventListener('click', () => ((state.weekStart = addDays(state.weekStart, 7)), render()));
-$('#thisWeek').addEventListener('click', () => ((state.weekStart = startOfWeek(new Date())), render()));
 $('#courseFilter').addEventListener('change', (e) => {
   state.course = prefs.course = e.target.value;
   savePrefs();
@@ -1123,7 +1173,7 @@ $('#showDone').addEventListener('change', (e) => {
   render();
 });
 $('#showHidden').addEventListener('change', (e) => ((state.showHidden = e.target.checked), render()));
-$('#refreshBtn').addEventListener('click', () => load(true));
+$('#syncBtn').addEventListener('click', () => load(true));
 
 $('#clearOverdueBtn').addEventListener('click', () => {
   const overdue = visibleItems().filter(isOverdue);
@@ -1141,8 +1191,8 @@ $('#restoreAllBtn').addEventListener('click', () => {
 
 document.addEventListener('keydown', (e) => {
   if (state.view === 'list' || document.querySelector('dialog[open], :popover-open') || e.target.matches('input, textarea, select')) return;
-  if (e.key === 'ArrowLeft') $('#prevWeek').click();
-  if (e.key === 'ArrowRight') $('#nextWeek').click();
+  if (e.key === 'ArrowLeft') shiftWeek(-1);
+  if (e.key === 'ArrowRight') shiftWeek(1);
 });
 
 // ---------- app lifetime and single tab ----------

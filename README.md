@@ -21,7 +21,7 @@ Click ⚙ (Settings):
 - **Learning Suite course feeds**: Learning Suite has one feed per course. In each course: Schedule tab → **Get iCalendar Feed** → copy the link. Paste them one per line.
 - **Semester dates**: only assignments due inside this range are shown.
 
-Sources sync when you open the page if the last sync is over an hour old. **Refresh** forces a sync.
+Sources sync when you open the page if the last sync is over an hour old. **Sync** forces a sync and shows the result briefly at the bottom of the page. Hover over **Sync** to see when each source last synced. Sync errors also appear under the toolbar.
 
 ## Time tracking
 

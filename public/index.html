@@ -26,13 +26,6 @@
         <button type="button" data-view="time" role="tab">Time</button>
       </div>
 
-      <div class="week-nav" id="weekNav">
-        <button type="button" id="prevWeek" aria-label="Previous week">‹</button>
-        <button type="button" id="thisWeek">Today</button>
-        <button type="button" id="nextWeek" aria-label="Next week">›</button>
-        <span id="weekLabel"></span>
-      </div>
-
       <div class="spacer"></div>
 
       <select id="courseFilter" aria-label="Filter by course"></select>
@@ -42,7 +35,8 @@
 
       <button type="button" id="clearOverdueBtn" class="assignments-only" hidden></button>
       <button type="button" id="clearedBtn" class="assignments-only" hidden></button>
-      <button type="button" id="refreshBtn" class="assignments-only">Refresh</button>
+      <!-- Hovering shows each source's sync status (app.js renderStatus). -->
+      <button type="button" id="syncBtn" class="assignments-only">Sync</button>
       <button type="button" id="addBtn" class="primary assignments-only">+ Add</button>
       <button type="button" id="themesBtn" class="icon-btn" aria-label="Themes" title="Themes">🎨</button>
       <button type="button" id="settingsBtn" class="icon-btn" aria-label="Settings" title="Settings">⚙</button>
@@ -61,7 +55,9 @@
       </div>
     </div>
 
-    <div id="status" class="status"></div>
+    <!-- Only shown when a source failed to sync; otherwise the status is in the Sync button's tooltip. -->
+    <div id="status" class="status" hidden></div>
+    <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
     <main id="main"></main>
 
     <!-- Item details -->
