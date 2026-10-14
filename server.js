@@ -292,6 +292,8 @@ function buildResponse(cache) {
       course: config.courseNames[item.course] || item.course,
       done: s.done ?? Boolean(item.submitted),
       hidden: Boolean(s.hidden),
+      // A cleared overdue item comes back if its due date has since changed (e.g. an extension).
+      dismissed: Boolean(s.dismissed) && (s.dismissedDue ?? null) === (item.due ?? null),
       notes: s.notes || '',
     };
   });
@@ -318,6 +320,20 @@ async function readBody(req) {
   let raw = '';
   for await (const chunk of req) raw += chunk;
   return raw ? JSON.parse(raw) : {};
+}
+
+function applyItemChanges(entry, body) {
+  if (typeof body.done === 'boolean') entry.done = body.done;
+  if (typeof body.hidden === 'boolean') entry.hidden = body.hidden;
+  if (typeof body.notes === 'string') entry.notes = body.notes;
+  if (body.dismissed === true) {
+    entry.dismissed = true;
+    entry.dismissedDue = typeof body.dismissedDue === 'string' ? body.dismissedDue : null;
+  } else if (body.dismissed === false) {
+    delete entry.dismissed;
+    delete entry.dismissedDue;
+  }
+  return entry;
 }
 
 function publicConfig(config) {
@@ -355,15 +371,25 @@ async function handleApi(req, res, url) {
     return send(res, 200, publicConfig(config));
   }
 
+  // Apply several item changes in one write: { changes: [{ id, done?, hidden?, notes?, dismissed?, dismissedDue? }] }
+  if (pathname === '/api/items/bulk' && method === 'POST') {
+    const body = await readBody(req);
+    if (!Array.isArray(body.changes)) return send(res, 400, { error: 'changes must be an array' });
+    const state = loadState();
+    for (const change of body.changes) {
+      if (typeof change.id !== 'string') continue;
+      state.items[change.id] = applyItemChanges({ ...(state.items[change.id] || {}) }, change);
+    }
+    writeJson(STATE_PATH, state);
+    return send(res, 200, { updated: body.changes.length });
+  }
+
   const itemMatch = pathname.match(/^\/api\/items\/(.+)$/);
   if (itemMatch && method === 'PATCH') {
     const id = decodeURIComponent(itemMatch[1]);
     const body = await readBody(req);
     const state = loadState();
-    const entry = { ...(state.items[id] || {}) };
-    if (typeof body.done === 'boolean') entry.done = body.done;
-    if (typeof body.hidden === 'boolean') entry.hidden = body.hidden;
-    if (typeof body.notes === 'string') entry.notes = body.notes;
+    const entry = applyItemChanges({ ...(state.items[id] || {}) }, body);
     state.items[id] = entry;
     writeJson(STATE_PATH, state);
     return send(res, 200, entry);

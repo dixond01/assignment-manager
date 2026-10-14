@@ -92,10 +92,19 @@ async function load(refresh = false) {
 function visibleItems() {
   return state.items.filter(
     (i) =>
+      !i.dismissed &&
       (!state.course || i.course === state.course) &&
       (state.showDone || !i.done) &&
       (state.showHidden || !i.hidden),
   );
+}
+
+const isOverdue = (item) => Boolean(item.due) && !item.done && new Date(item.due) < new Date();
+
+async function bulkUpdate(changes) {
+  for (const { id, ...rest } of changes) Object.assign(state.items.find((i) => i.id === id), rest);
+  render();
+  await api('/api/items/bulk', { method: 'POST', body: { changes } });
 }
 
 const byDue = (a, b) => (a.due || '9999').localeCompare(b.due || '9999') || a.title.localeCompare(b.title);
@@ -116,6 +125,7 @@ function render() {
   $('#showHidden').checked = state.showHidden;
   renderCourseFilter();
   renderStatus();
+  renderClearButtons();
 
   const main = $('#main');
   main.replaceChildren();
@@ -157,9 +167,41 @@ function renderStatus() {
   $('#status').replaceChildren(...parts.flatMap((p, i) => (i ? [' · ', p] : [p])));
 }
 
+function renderClearButtons() {
+  const overdue = visibleItems().filter(isOverdue).length;
+  const cleared = state.items.filter((i) => i.dismissed).length;
+  $('#clearOverdueBtn').hidden = !overdue;
+  $('#clearOverdueBtn').textContent = `Clear overdue (${overdue})`;
+  $('#clearedBtn').hidden = !cleared;
+  $('#clearedBtn').textContent = `Cleared (${cleared})`;
+  if ($('#clearedDialog').open) renderClearedList();
+}
+
+function renderClearedList() {
+  const cleared = state.items.filter((i) => i.dismissed).sort((a, b) => byDue(b, a));
+  $('#clearedList').replaceChildren(
+    ...(cleared.length
+      ? cleared.map((item) =>
+          el(
+            'div',
+            { class: 'cleared-row', style: `--course: ${courseColor(item.course)}` },
+            el(
+              'div',
+              { class: 'body' },
+              el('div', { class: 'title' }, item.title),
+              el('div', { class: 'meta' }, `${item.course} · due ${fmtDay(new Date(item.due))}${item.allDay ? '' : ` ${fmtTime(new Date(item.due))}`}`),
+            ),
+            el('button', { type: 'button', onclick: () => bulkUpdate([{ id: item.id, dismissed: false }]) }, 'Restore'),
+          ),
+        )
+      : [el('small', {}, 'Nothing cleared.')]),
+  );
+  $('#restoreAllBtn').hidden = !cleared.length;
+}
+
 function renderCard(item, { showDate = false } = {}) {
   const due = item.due ? new Date(item.due) : null;
-  const overdue = due && !item.done && due < new Date();
+  const overdue = isOverdue(item);
   const meta = [
     showDate && due && el('span', { class: 'list-date' }, fmtDay(due)),
     due && !item.allDay && el('span', {}, fmtTime(due)),
@@ -357,6 +399,20 @@ $('#showDone').addEventListener('change', (e) => {
 });
 $('#showHidden').addEventListener('change', (e) => ((state.showHidden = e.target.checked), render()));
 $('#refreshBtn').addEventListener('click', () => load(true));
+
+$('#clearOverdueBtn').addEventListener('click', () => {
+  const overdue = visibleItems().filter(isOverdue);
+  const scope = state.course ? ` in ${state.course}` : '';
+  if (!overdue.length || !confirm(`Remove ${overdue.length} overdue assignment${overdue.length === 1 ? '' : 's'}${scope} from your list? You can restore them from "Cleared".`)) return;
+  bulkUpdate(overdue.map((i) => ({ id: i.id, dismissed: true, dismissedDue: i.due })));
+});
+$('#clearedBtn').addEventListener('click', () => {
+  renderClearedList();
+  $('#clearedDialog').showModal();
+});
+$('#restoreAllBtn').addEventListener('click', () => {
+  bulkUpdate(state.items.filter((i) => i.dismissed).map((i) => ({ id: i.id, dismissed: false })));
+});
 
 document.addEventListener('keydown', (e) => {
   if (state.view !== 'week' || document.querySelector('dialog[open]') || e.target.matches('input, textarea, select')) return;

@@ -86,6 +86,9 @@ button.danger { color: var(--danger); }
 .week-nav { display: inline-flex; align-items: center; gap: 4px; }
 #weekLabel { margin-left: 6px; font-weight: 600; }
 
+/* Larger gear glyph, sized to keep the button the same height as its neighbors. */
+#settingsBtn { font-size: 20px; line-height: 1; padding: 5px 8px; }
+
 .check { display: inline-flex; align-items: center; gap: 4px; color: var(--muted); }
 
 .status { padding: 6px 16px; font-size: 12px; color: var(--muted); }
@@ -202,6 +205,12 @@ legend { font-weight: 600; padding: 0 4px; }
 .course-names .original { font-size: 13px; color: var(--muted); overflow-wrap: anywhere; }
 .course-names .original::before { content: ""; display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; background: var(--course); }
 #settingsDialog .dialog-body { max-height: calc(100vh - 40px); overflow: auto; }
+
+.cleared-list { display: flex; flex-direction: column; gap: 6px; max-height: 50vh; overflow: auto; }
+.cleared-row { display: flex; align-items: center; gap: 10px; padding: 6px 8px; border: 1px solid var(--border); border-left: 4px solid var(--course, var(--border)); border-radius: 6px; }
+.cleared-row .body { flex: 1; min-width: 0; }
+.cleared-row .title { font-weight: 500; overflow-wrap: anywhere; }
+.cleared-row .meta { font-size: 12px; color: var(--muted); }
 
 .detail-course { font-size: 12px; font-weight: 600; color: var(--course, var(--muted)); }
 .detail-meta { color: var(--muted); font-size: 13px; }
