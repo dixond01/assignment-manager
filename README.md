@@ -101,7 +101,12 @@ After the first sync, your courses appear in Settings under **Course names**. Yo
 - **Time on an assignment:** hover over a card and click its ⏱ button. Pick +15m, +30m, +1h, or +2h, or type hours and minutes, then press Enter. Check **Mark as done** to check the assignment off in the same step. Checking an assignment off by itself never asks about time.
 - **Other study time:** open the **Time** tab and click **+ Log time**.
 - The **Time** tab shows each course's average hours per week, this week's hours, and the total, plus a week-by-week table. Click a week to see and edit its entries.
-- Averages count only finished Monday–Sunday weeks since your semester start. Weeks with no time count as zero, and the current week counts once it ends.
+- Averages count only finished Monday–Sunday weeks since your semester start; the current week counts once it ends.
+- Empty weeks before a course's first logged week and after its last are skipped, so starting mid-semester or a term-only course doesn't pull the average down. Empty weeks in between count as zero.
+- Each average shows how many weeks it covers. In the table, **0** means an empty week counts and **—** means it's skipped.
+- Click a class's cell in the week-by-week table to change that week's hours. A higher total opens **Log time** with the difference filled in, as "Manually Entered Time" for the week. To lower a week, delete entries in its list.
+- **Edit weeks** lets you change many weeks at once: type hours into any cell, and switch 0 h weeks between **Counts** and **Skipped** (or use **Count all** / **Skip all** for a whole week). Nothing is saved until you click **Done** and confirm the summary; **Cancel** throws the changes away.
+- **Log time** has an optional **Title** for study time that isn't tied to an assignment.
 - **Copy report** copies each course's weekly average as plain text.
 
 ### Themes

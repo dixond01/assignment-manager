@@ -19,6 +19,9 @@ const state = {
   items: [],
   timeLog: [], // time entries: { id, course, courseOriginal, courseColor, date: 'YYYY-MM-DD', minutes, itemId, itemTitle, note }
   minutesByItem: new Map(), // assignment id -> total minutes logged
+  weekCounts: {}, // empty-week overrides: { Monday 'YYYY-MM-DD': { course display name: true (count) | false (skip) } }
+  timeEdit: null, // the week table's edit mode, unsaved: { totals: Map(cell key -> new total minutes), counts: Map(cell key -> true | false) }
+  cellEdit: null, // one week-table cell being edited outside edit mode: { key, value, error }
   semester: null, // { start, end } as 'YYYY-MM-DD'
   sources: {},
   configured: true,
@@ -190,6 +193,7 @@ function render() {
   renderCourseFilter();
   renderStatus();
   renderClearButtons();
+  fitToolbar();
 
   const main = $('#main');
   main.replaceChildren();
@@ -240,6 +244,22 @@ function renderStatus() {
   $('#status').hidden = !errors.length;
   $('#status').replaceChildren(...errors.flatMap((l, i) => [i ? ' · ' : '', el('span', { class: 'error' }, l.text)]));
 }
+
+// Center the toolbar's middle group when it fits with --toolbar-gap of whitespace on both sides
+// (the sides are equal columns, so the wider side sets the room); otherwise give it its own row.
+function fitToolbar() {
+  const bar = $('.toolbar');
+  const style = getComputedStyle(bar);
+  const gap = parseFloat(style.columnGap) || 0;
+  const room = bar.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight);
+  const natural = (group) => {
+    const shown = [...group.children].filter((c) => c.getClientRects().length);
+    return shown.reduce((sum, c) => sum + c.getBoundingClientRect().width, 0) + 8 * Math.max(0, shown.length - 1);
+  };
+  const side = Math.max(natural(bar.querySelector('.toolbar-left')), natural(bar.querySelector('.toolbar-right')));
+  bar.classList.toggle('stacked', 2 * side + natural(bar.querySelector('.toolbar-middle')) + 2 * gap > room);
+}
+window.addEventListener('resize', fitToolbar);
 
 function renderClearButtons() {
   const overdue = visibleItems().filter(isOverdue).length;
@@ -369,7 +389,7 @@ function renderList() {
         el('div', { class: 'items' }, list.map((i) => renderCard(i, { showDate: true }))),
       ),
     );
-  return sections.length ? el('div', {}, sections) : el('div', { class: 'empty' }, 'Nothing to show. 🎉');
+  return el('div', { class: 'list-view' }, sections.length ? sections : el('div', { class: 'empty' }, 'Nothing to show. 🎉'));
 }
 
 // ---------- dialogs ----------
@@ -796,6 +816,8 @@ function quickAddChips(hoursInput, minutesInput) {
   );
 }
 
+const FUTURE_DATE_ERROR = 'You can’t log time for a day that hasn’t happened yet.';
+
 const enteredMinutes = (hoursInput, minutesInput) => Math.round((Number(hoursInput.value) || 0) * 60 + (Number(minutesInput.value) || 0));
 
 // The quick "Log time" popover for one assignment (from a card's ⏱ button or the details dialog).
@@ -803,7 +825,7 @@ function openLogPopover(item, anchor) {
   document.querySelector('.log-popover')?.remove();
   const hours = el('input', { type: 'number', min: 0, max: 24, step: 1, inputMode: 'numeric', 'aria-label': 'Hours' });
   const minutes = el('input', { type: 'number', min: 0, max: 59, step: 1, inputMode: 'numeric', 'aria-label': 'Minutes' });
-  const date = el('input', { type: 'date', value: dateKey(new Date()), required: true, 'aria-label': 'Date' });
+  const date = el('input', { type: 'date', value: dateKey(new Date()), max: dateKey(new Date()), required: true, 'aria-label': 'Date' });
   const error = el('small', { class: 'warning', hidden: true });
   // Optional: check the assignment off in the same step.
   const markDone = el('input', { type: 'checkbox' });
@@ -822,6 +844,11 @@ function openLogPopover(item, anchor) {
           error.textContent = 'Enter some time first.';
           error.hidden = false;
           return hours.focus();
+        }
+        if (date.value > dateKey(new Date())) {
+          error.textContent = FUTURE_DATE_ERROR;
+          error.hidden = false;
+          return date.focus();
         }
         try {
           storeTimeEntry(
@@ -865,6 +892,7 @@ function openLogPopover(item, anchor) {
     ),
   );
 
+  DatePicker.attach(date); // once it's in the form, so its button can take its place
   // Inside an open modal dialog, everything outside it is inert, so host the popover there.
   (anchor.closest('dialog') || document.body).append(pop);
   pop.showPopover();
@@ -879,7 +907,7 @@ function openLogPopover(item, anchor) {
 
 // ----- Time view -----
 
-// The semester's Monday-start weeks up to the current one. Only finished weeks count toward averages.
+// The semester's Monday-start weeks up to the current one. Only finished weeks can count toward averages.
 function semesterWeeks() {
   const { start, end } = state.semester || {};
   if (!start || !end) return { weeks: [], total: 0 };
@@ -905,7 +933,14 @@ function timeCourses() {
     .map(([course, color]) => ({ course, color }));
 }
 
-// Minutes per week (Monday's date key) per course display name.
+// A class's week in the table, as a key: Monday's date key + '|' + course display name.
+const cellKey = (week, course) => `${week.key}|${course}`;
+const splitCellKey = (key) => [key.slice(0, 10), key.slice(11)];
+
+// Minutes per week (Monday's date key) per course display name, and which finished weeks count toward
+// each course's average. A week with time always counts. An empty week counts as 0 only between the
+// course's first and last logged weeks (so starting mid-semester or a term-only course isn't skewed),
+// unless state.weekCounts overrides it. Edit mode's unsaved changes (state.timeEdit) are included.
 function timeTable() {
   const { weeks, total, first, end } = semesterWeeks();
   const courses = timeCourses();
@@ -914,28 +949,193 @@ function timeTable() {
     const row = minutes.get(dateKey(startOfWeek(parseDateKey(t.date))));
     if (row) row.set(t.course, (row.get(t.course) || 0) + t.minutes);
   }
-  const get = (week, course) => minutes.get(week.key).get(course) || 0;
+  const edit = state.timeEdit;
+  const logged = (week, course) => minutes.get(week.key)?.get(course) || 0;
+  const get = (week, course) => edit?.totals.get(cellKey(week, course)) ?? logged(week, course);
   const complete = weeks.filter((w) => w.complete);
+
+  // First and last week index with time, per course (the current week included).
+  const range = (course) => {
+    const indexes = weeks.map((w, i) => (get(w, course) ? i : -1)).filter((i) => i >= 0);
+    return indexes.length ? [indexes[0], indexes.at(-1)] : null;
+  };
+  const ranges = new Map();
+  // Whether an empty finished week counts, before any override.
+  const countsByDefault = (week, course) => {
+    if (!ranges.has(course)) ranges.set(course, range(course));
+    const r = ranges.get(course);
+    const i = week.n - 1;
+    return Boolean(r) && i > r[0] && i < r[1];
+  };
+  // withEdit = false: as saved, ignoring edit mode's unsaved count changes.
+  const counts = (week, course, withEdit = true) => {
+    if (!week.complete) return false;
+    if (get(week, course)) return true;
+    const unsaved = withEdit ? edit?.counts.get(cellKey(week, course)) : undefined;
+    return unsaved ?? state.weekCounts[week.key]?.[course] ?? countsByDefault(week, course);
+  };
+
   const stats = new Map(
     courses.map(({ course }) => {
-      const completeMinutes = complete.reduce((sum, w) => sum + get(w, course), 0);
+      const counted = complete.filter((w) => counts(w, course));
+      const completeMinutes = counted.reduce((sum, w) => sum + get(w, course), 0);
       return [
         course,
         {
-          average: complete.length ? completeMinutes / complete.length : null,
+          average: counted.length ? completeMinutes / counted.length : null,
           completeMinutes,
+          countedWeeks: counted.length,
           total: weeks.reduce((sum, w) => sum + get(w, course), 0),
           thisWeek: weeks.find((w) => !w.complete) ? get(weeks.at(-1), course) : 0,
         },
       ];
     }),
   );
-  return { weeks, complete, total, first, end, courses, get, stats };
+  // All courses together: time per week over the finished weeks where at least one course counts.
+  const countedAny = complete.filter((w) => courses.some(({ course }) => counts(w, course)));
+  const allMinutes = countedAny.reduce((sum, w) => sum + courses.reduce((acc, { course }) => acc + get(w, course), 0), 0);
+  const allAverage = countedAny.length ? allMinutes / countedAny.length : null;
+  return { weeks, complete, total, first, end, courses, logged, get, counts, countsByDefault, stats, allAverage, allWeeks: countedAny.length };
+}
+
+// Original course names behind a display name (merged courses share one).
+function courseOriginals(display) {
+  const originals = new Set();
+  for (const i of [...state.items, ...state.timeLog]) if (i.course === display) originals.add(i.courseOriginal);
+  return originals.size ? [...originals] : [display];
+}
+
+function courseColorByName(display) {
+  const found = [...state.items, ...state.timeLog].find((i) => i.course === display);
+  return found ? courseColorOf(found) : autoCourseColor(display);
+}
+
+// "1.5", "1:30", "90m", "2h" or "1h 30m" -> minutes. Blank -> null. NaN if it can't be read.
+function parseHoursInput(text) {
+  const s = text.trim().toLowerCase();
+  if (!s) return null;
+  let m = s.match(/^(\d+):(\d{1,2})$/);
+  if (m) return Number(m[1]) * 60 + Number(m[2]);
+  if (/^\d*\.?\d+$/.test(s)) return Math.round(Number(s) * 60);
+  m = s.match(/^(?:(\d*\.?\d+)\s*h)?\s*(?:(\d+)\s*m)?$/);
+  if (m && (m[1] || m[2])) return Math.round(Number(m[1] || 0) * 60 + Number(m[2] || 0));
+  return NaN;
+}
+
+const MANUAL_TITLE = 'Manually Entered Time';
+
+// Redraw, keeping focus on the same table input or switch (edit mode redraws after every change).
+function renderKeepingFocus() {
+  setTimeout(() => {
+    const key = document.activeElement?.dataset?.key;
+    render();
+    if (!key) return;
+    const target = document.querySelector(`#main [data-key="${CSS.escape(key)}"]`);
+    target?.focus();
+    target?.select?.();
+  });
+}
+
+// ----- Editing one cell outside edit mode: a higher total opens Log time with the difference -----
+
+function startCellEdit(week, course) {
+  state.cellEdit = { key: cellKey(week, course), value: '', error: '' };
+  render();
+  const input = document.querySelector('#main .cell-edit input');
+  input?.focus();
+  input?.select();
+}
+
+function commitCellEdit(week, course, text, table) {
+  const logged = table.logged(week, course);
+  const total = parseHoursInput(text);
+  const keepOpen = (error) => {
+    state.cellEdit = { key: cellKey(week, course), value: text, error };
+    render();
+    const input = document.querySelector('#main .cell-edit input');
+    input?.focus();
+  };
+  if (Number.isNaN(total)) return keepOpen('Enter hours like 1.5 or 1:30.');
+  if (total == null || total === logged) {
+    state.cellEdit = null;
+    return render();
+  }
+  if (total < logged) return keepOpen(`${fmtDuration(logged)} is already logged. Delete entries in this week's list to lower it.`);
+  state.cellEdit = null;
+  render();
+  openTimeDialog(null, {
+    course: courseOriginals(course)[0],
+    date: week.key,
+    minutes: total - logged,
+    title: MANUAL_TITLE,
+    wholeWeek: true,
+    info: `Week ${week.n} for ${course} goes from ${fmtDuration(logged)} to ${fmtDuration(total)}.`,
+  });
+}
+
+function cancelCellEdit() {
+  if (!state.cellEdit) return;
+  state.cellEdit = null;
+  render();
+}
+
+// ----- Edit mode: unsaved hours and count/skip changes, reviewed before saving -----
+
+const timeEditChanges = () => (state.timeEdit ? state.timeEdit.totals.size + state.timeEdit.counts.size : 0);
+
+function startTimeEdit() {
+  state.cellEdit = null;
+  state.timeEdit = { totals: new Map(), counts: new Map() };
+  render();
+}
+
+function cancelTimeEdit() {
+  if (timeEditChanges() && !confirm('Discard your unsaved changes to the week-by-week table?')) return;
+  state.timeEdit = null;
+  render();
+}
+
+function finishTimeEdit() {
+  if (!timeEditChanges()) {
+    state.timeEdit = null;
+    return render();
+  }
+  $('#reviewError').hidden = true;
+  renderReview();
+  $('#reviewDialog').showModal();
+}
+
+// A typed total in edit mode. Lower than what's logged isn't allowed; equal (or blank) drops the change.
+// Typing 0 into an empty finished week also counts it as 0 (typing a number never leaves it skipped).
+function setEditTotal(week, course, text, table) {
+  const key = cellKey(week, course);
+  const logged = table.logged(week, course);
+  const total = parseHoursInput(text);
+  if (Number.isNaN(total)) showToast('Couldn’t read that time', [{ text: 'Enter hours like 1.5 or 1:30.', error: true }]);
+  else if (total != null && total < logged)
+    showToast('Can’t lower logged time here', [{ text: `${course} already has ${fmtDuration(logged)} logged in week ${week.n}. Delete entries in that week's list to lower it.`, error: true }]);
+  else if (total === 0 && logged === 0) {
+    state.timeEdit.totals.delete(key);
+    if (week.complete) setEditCount(week, course, true, table);
+  } else if (total == null || total === logged) state.timeEdit.totals.delete(key);
+  else {
+    state.timeEdit.totals.set(key, total);
+    state.timeEdit.counts.delete(key); // a week with time always counts
+  }
+  renderKeepingFocus();
+}
+
+// Count an empty week as 0 (true) or skip it (false). Matching the saved state drops the change.
+function setEditCount(week, course, count, table) {
+  const key = cellKey(week, course);
+  if (count === table.counts(week, course, false)) state.timeEdit.counts.delete(key);
+  else state.timeEdit.counts.set(key, count);
 }
 
 function renderTime() {
   const table = timeTable();
-  const { weeks, complete, courses, get, stats } = table;
+  const { weeks, complete, courses, get, counts, stats } = table;
+  const editing = Boolean(state.timeEdit);
   const current = weeks.find((w) => !w.complete);
   const selectedKey = dateKey(state.weekStart);
 
@@ -950,7 +1150,16 @@ function renderTime() {
     { class: 'time-head' },
     el('h2', {}, heading),
     el('div', { class: 'spacer' }),
-    el('button', { type: 'button', onclick: (e) => copyReport(e.currentTarget, table), disabled: !complete.length, title: complete.length ? '' : 'Available after the first full week' }, 'Copy report'),
+    el(
+      'button',
+      {
+        type: 'button',
+        onclick: (e) => copyReport(e.currentTarget, table),
+        disabled: !complete.length || editing,
+        title: editing ? 'Finish editing first' : complete.length ? '' : 'Available after the first full week',
+      },
+      'Copy report',
+    ),
     el('button', { type: 'button', class: 'primary', onclick: () => openTimeDialog() }, '+ Log time'),
   );
 
@@ -977,9 +1186,12 @@ function renderTime() {
     {},
     el('th', {}, 'Week'),
     courses.map(({ course, color }) => el('th', { style: `--course: ${color}` }, el('span', { class: 'dot' }), course)),
-    el('th', { class: 'total' }, 'Total'),
+    editing ? el('th', {}, 'Empty classes') : el('th', { class: 'total' }, 'Total'),
   );
+
   const rows = weeks.map((w) => {
+    const label = el('td', {}, `Week ${w.n}`, el('span', { class: 'wk' }, fmtShort(w.start) + (w.complete ? '' : ' · in progress')));
+    if (editing) return editRow(w, label, table);
     const sum = courses.reduce((acc, { course }) => acc + get(w, course), 0);
     return el(
       'tr',
@@ -991,20 +1203,34 @@ function renderTime() {
           render();
         },
       },
-      el('td', {}, `Week ${w.n}`, el('span', { class: 'wk' }, fmtShort(w.start) + (w.complete ? '' : ' · in progress'))),
+      label,
       courses.map(({ course, color }) => {
         const v = get(w, course);
+        const key = cellKey(w, course);
+        if (state.cellEdit?.key === key) return cellEditor(w, course, table);
+        const counted = counts(w, course);
+        const text = v ? fmtHours(v) : counted ? '0' : '—';
         return el(
           'td',
-          { class: `cell${v ? '' : ' zero'}`, style: `--course: ${color}; --a: ${((v / max) * 0.3).toFixed(3)}` },
+          {
+            class: `cell editable${v ? '' : ' zero'}`,
+            style: `--course: ${color}; --a: ${((v / max) * 0.3).toFixed(3)}`,
+            title: `Change ${course}’s hours for week ${w.n}`,
+            onclick: (e) => {
+              e.stopPropagation();
+              startCellEdit(w, course);
+            },
+          },
           el('span', { class: 'bar' }),
-          el('span', { class: 'v' }, v ? fmtHours(v) : '—'),
+          el('span', { class: 'v' }, text),
         );
       }),
       el('td', { class: 'total' }, fmtHours(sum)),
     );
   });
-  const allAverage = complete.length ? courses.reduce((acc, { course }) => acc + stats.get(course).average, 0) : null;
+
+  const { allAverage } = table;
+  const weeksLabel = (n) => `${n} week${n === 1 ? '' : 's'}`;
   const foot = el(
     'tr',
     {},
@@ -1012,14 +1238,47 @@ function renderTime() {
       'td',
       {},
       'Average / week',
-      el('small', {}, complete.length ? `${complete.length} full week${complete.length === 1 ? '' : 's'} · weeks with no time count as 0` : 'Starts after the first full week'),
+      el(
+        'small',
+        {},
+        !complete.length
+          ? 'Starts after the first full week'
+          : editing
+            ? 'Includes your unsaved changes.'
+            : 'Empty weeks before a course’s first log or after its last are skipped. Use Edit weeks to change that.',
+      ),
     ),
-    courses.map(({ course }) => el('td', {}, complete.length ? fmtHours(stats.get(course).average) : '—')),
-    el('td', { class: 'total' }, allAverage == null ? '—' : fmtHours(allAverage)),
+    courses.map(({ course }) => {
+      const s = stats.get(course);
+      return el('td', {}, s.average == null ? '—' : fmtHours(s.average), s.average == null ? null : el('small', {}, weeksLabel(s.countedWeeks)));
+    }),
+    editing
+      ? el('td', {})
+      : el('td', { class: 'total' }, allAverage == null ? '—' : fmtHours(allAverage), allAverage == null ? null : el('small', {}, weeksLabel(table.allWeeks))),
   );
+
+  const banner = editing
+    ? el(
+        'div',
+        { class: 'edit-banner' },
+        '✎ Type a week’s hours for any class. Switch 0 h weeks between counting as 0 and skipped. Nothing is saved until you click Done.',
+      )
+    : null;
   const weekTable = weeks.length
-    ? el('div', { class: 'table-wrap' }, el('table', { class: 'weeks' }, el('thead', {}, headRow), el('tbody', {}, rows), el('tfoot', {}, foot)))
+    ? el('div', { class: `table-wrap${editing ? ' editing' : ''}` }, banner, el('table', { class: 'weeks' }, el('thead', {}, headRow), el('tbody', {}, rows), el('tfoot', {}, foot)))
     : el('div', { class: 'empty' }, 'Weeks appear here once the semester starts.');
+
+  const tableHead = el(
+    'div',
+    { class: 'time-head' },
+    el('h2', {}, 'Week by week (hours)'),
+    el('div', { class: 'spacer' }),
+    !weeks.length
+      ? null
+      : editing
+        ? [el('button', { type: 'button', onclick: cancelTimeEdit }, 'Cancel'), el('button', { type: 'button', class: 'primary', onclick: finishTimeEdit }, 'Done')]
+        : el('button', { type: 'button', onclick: startTimeEdit }, 'Edit weeks'),
+  );
 
   return el(
     'div',
@@ -1027,12 +1286,272 @@ function renderTime() {
     renderPager(),
     head,
     tiles,
-    el('div', { class: 'time-head' }, el('h2', {}, 'Week by week (hours)')),
+    tableHead,
     weekTable,
     el('div', { class: 'time-head' }, el('h2', {}, `Entries · ${fmtShort(state.weekStart)} – ${fmtShort(addDays(state.weekStart, 6))}`)),
     renderTimeEntries(),
   );
 }
+
+// The hours box for a cell being edited outside edit mode. Enter applies, Escape or clicking away cancels.
+function cellEditor(week, course, table) {
+  const edit = state.cellEdit;
+  const logged = table.logged(week, course);
+  const input = el('input', {
+    class: 'week-input',
+    value: edit.value || (logged ? fmtHours(logged) : '0'),
+    'aria-label': `${course} hours for week ${week.n}`,
+    onkeydown: (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        commitCellEdit(week, course, input.value, table);
+      } else if (e.key === 'Escape') {
+        e.preventDefault();
+        cancelCellEdit();
+      }
+    },
+    // Only this edit: redrawing (for example to show an error) replaces the input and blurs the old one.
+    onblur: () => state.cellEdit === edit && cancelCellEdit(),
+  });
+  return el(
+    'td',
+    { class: 'cell cell-edit', onclick: (e) => e.stopPropagation() },
+    input,
+    el('small', { class: `hint${edit.error ? ' error' : ''}` }, edit.error || `${fmtDuration(logged)} logged · Enter to add time`),
+  );
+}
+
+// A table row in edit mode: an hours box per class, a Counts/Skipped switch on finished weeks at 0 h,
+// and buttons that count or skip every empty class that week.
+function editRow(w, label, table) {
+  const { courses, get, counts } = table;
+  const empty = w.complete ? courses.filter(({ course }) => !get(w, course)) : [];
+  const countedEmpty = empty.filter(({ course }) => counts(w, course)).length;
+  const setAll = (count) => {
+    for (const { course } of empty) setEditCount(w, course, count, table);
+    renderKeepingFocus();
+  };
+  let actions;
+  if (!w.complete) actions = el('span', { class: 'muted' }, 'counts when it ends');
+  else if (!empty.length) actions = el('span', { class: 'muted' }, 'none');
+  else
+    actions = [
+      el('button', { type: 'button', disabled: countedEmpty === empty.length, onclick: () => setAll(true) }, 'Count all'),
+      el('button', { type: 'button', disabled: countedEmpty === 0, onclick: () => setAll(false) }, 'Skip all'),
+    ];
+
+  return el(
+    'tr',
+    { class: w.complete ? '' : 'current' },
+    label,
+    courses.map(({ course }) => {
+      const v = get(w, course);
+      const key = cellKey(w, course);
+      const changed = state.timeEdit.totals.has(key) || state.timeEdit.counts.has(key);
+      const skipped = w.complete && !v && !counts(w, course);
+      // Applied on Enter or leaving the box once anything is typed, even an unchanged "0" (which counts a
+      // skipped week). The strikethrough marks only the untouched 0 of a skipped week.
+      let typed = false;
+      const apply = () => {
+        if (!typed) return;
+        typed = false;
+        setEditTotal(w, course, input.value, table);
+      };
+      const input = el('input', {
+        class: `week-input${skipped ? ' skipped' : ''}`,
+        value: v ? fmtHours(v) : '0',
+        'data-key': key,
+        'aria-label': `${course} hours for week ${w.n}`,
+        oninput: () => {
+          typed = true;
+          input.classList.remove('skipped');
+        },
+        onblur: apply,
+        onkeydown: (e) => {
+          if (e.key === 'Enter') {
+            e.preventDefault();
+            apply();
+          } else if (e.key === 'Escape') {
+            e.preventDefault();
+            typed = false;
+            input.value = v ? fmtHours(v) : '0';
+            input.classList.toggle('skipped', skipped);
+            input.blur();
+          }
+        },
+      });
+      const toggle =
+        w.complete && !v
+          ? el(
+              'button',
+              {
+                type: 'button',
+                class: 'switch',
+                role: 'switch',
+                'aria-checked': String(!skipped),
+                'data-key': `switch|${key}`,
+                title: skipped ? `Skipped in ${course}’s average. Click to count it as 0.` : `Counted as 0 in ${course}’s average. Click to skip it.`,
+                onclick: () => {
+                  setEditCount(w, course, skipped, table);
+                  renderKeepingFocus();
+                },
+              },
+              el('span', { class: 'label' }, skipped ? 'Skipped' : 'Counts'),
+              el('span', { class: 'track' }),
+            )
+          : null;
+      // The switch sits in a fixed slot before the box, so every box lines up under its class name.
+      return el('td', { class: `cell edit-cell${changed ? ' changed' : ''}` }, el('span', { class: 'switch-slot' }, toggle), input);
+    }),
+    el('td', { class: 'row-actions' }, actions),
+  );
+}
+
+// ----- Review dialog: what edit mode will save -----
+
+function reviewChanges() {
+  const table = timeTable();
+  const weekByKey = new Map(table.weeks.map((w) => [w.key, w]));
+  const order = (a, b) => a.week.n - b.week.n || a.course.localeCompare(b.course);
+  const time = [...state.timeEdit.totals]
+    .map(([key, total]) => {
+      const [weekKey, course] = splitCellKey(key);
+      const week = weekByKey.get(weekKey);
+      return week && { key, week, course, total, logged: table.logged(week, course) };
+    })
+    .filter(Boolean)
+    .sort(order);
+  const counting = [...state.timeEdit.counts]
+    .map(([key, count]) => {
+      const [weekKey, course] = splitCellKey(key);
+      const week = weekByKey.get(weekKey);
+      return week && { key, week, course, count };
+    })
+    .filter(Boolean)
+    .sort(order);
+  return { table, time, counting };
+}
+
+function renderReview() {
+  const { time, counting } = reviewChanges();
+  const drop = (map, key) => {
+    map.delete(key);
+    renderReview();
+    render();
+  };
+  const weekCell = (week) => el('td', {}, `Week ${week.n}`, el('span', { class: 'wk' }, fmtShort(week.start)));
+  const classCell = (course) => el('td', {}, el('span', { class: 'dot', style: `background: ${courseColorByName(course)}` }), course);
+  const removeButton = (map, key, what) => el('button', { type: 'button', class: 'remove', title: `Don't save this ${what}`, 'aria-label': `Remove this ${what}`, onclick: () => drop(map, key) }, '×');
+
+  const timeRows = time.map((row) => {
+    const adds = row.total - row.logged;
+    const hours = el('input', { type: 'number', min: 0, step: 1, value: Math.floor(adds / 60), 'aria-label': 'Hours to add' });
+    const minutes = el('input', { type: 'number', min: 0, max: 59, step: 1, value: adds % 60, 'aria-label': 'Minutes to add' });
+    const newTotal = el('td', {}, fmtDuration(row.total));
+    const update = () => {
+      const add = Math.max(0, enteredMinutes(hours, minutes));
+      state.timeEdit.totals.set(row.key, row.logged + add);
+      newTotal.textContent = fmtDuration(row.logged + add);
+      renderReviewSummary();
+      render();
+    };
+    hours.addEventListener('input', update);
+    minutes.addEventListener('input', update);
+    return el(
+      'tr',
+      {},
+      classCell(row.course),
+      weekCell(row.week),
+      el('td', { class: 'muted' }, fmtDuration(row.logged)),
+      newTotal,
+      el('td', { class: 'adds' }, hours, el('span', { class: 'unit' }, 'h'), minutes, el('span', { class: 'unit' }, 'm')),
+      el('td', {}, removeButton(state.timeEdit.totals, row.key, 'time')),
+    );
+  });
+  const countLabel = (count) => (count ? 'Counts as 0' : 'Skipped');
+  const countRows = counting.map((row) =>
+    el(
+      'tr',
+      {},
+      classCell(row.course),
+      weekCell(row.week),
+      el('td', { class: 'change' }, `${countLabel(!row.count)} → `, el('b', {}, countLabel(row.count))),
+      el('td', {}, removeButton(state.timeEdit.counts, row.key, 'change')),
+    ),
+  );
+
+  const sections = [
+    time.length
+      ? [
+          el('h3', {}, 'Time to add'),
+          el(
+            'table',
+            {},
+            el('thead', {}, el('tr', {}, el('th', {}, 'Class'), el('th', {}, 'Week'), el('th', {}, 'Logged'), el('th', {}, 'New total'), el('th', {}, 'Adds'), el('th', {}))),
+            el('tbody', {}, timeRows),
+          ),
+        ]
+      : null,
+    counting.length ? [el('h3', {}, 'Week counting'), el('table', {}, el('tbody', {}, countRows))] : null,
+    time.length || counting.length ? null : el('p', { class: 'muted' }, 'No changes left. Saving just leaves edit mode.'),
+  ];
+  $('#reviewBody').replaceChildren(...sections.flat().filter(Boolean));
+  $('#reviewNote').hidden = !time.length;
+  renderReviewSummary();
+}
+
+function renderReviewSummary() {
+  const { time, counting } = reviewChanges();
+  const adding = time.filter((row) => row.total > row.logged);
+  const minutes = adding.reduce((sum, row) => sum + row.total - row.logged, 0);
+  const parts = [];
+  if (adding.length) parts.push(`Adds ${fmtDuration(minutes)} across ${adding.length} entr${adding.length === 1 ? 'y' : 'ies'}`);
+  if (counting.length) parts.push(`${counting.length} counting change${counting.length === 1 ? '' : 's'}`);
+  $('#reviewSummary').textContent = parts.join(' · ');
+}
+
+$('#reviewForm').addEventListener('submit', async (e) => {
+  if (e.submitter?.value !== 'save') return;
+  e.preventDefault(); // close only once it's saved
+  // Drop time rows that no longer add anything, so the defaults below see what will really be saved.
+  const before = timeTable();
+  for (const [key, total] of state.timeEdit.totals) {
+    const [weekKey, course] = splitCellKey(key);
+    const week = before.weeks.find((w) => w.key === weekKey);
+    if (!week || total <= before.logged(week, course)) state.timeEdit.totals.delete(key);
+  }
+  const { table, time, counting } = reviewChanges();
+  // A count that matches the default is saved as no override, so the automatic rule keeps applying.
+  const resolved = counting.map((row) => ({ ...row, saved: row.count === table.countsByDefault(row.week, row.course) ? null : row.count }));
+  const body = {
+    entries: time.map((row) => ({
+      course: courseOriginals(row.course)[0],
+      date: row.week.key,
+      minutes: row.total - row.logged,
+      title: MANUAL_TITLE,
+      wholeWeek: true,
+      note: '',
+    })),
+    weekCounts: resolved.flatMap((row) => courseOriginals(row.course).map((original) => ({ week: row.week.key, course: original, count: row.saved }))),
+  };
+  try {
+    if (body.entries.length || body.weekCounts.length) {
+      const { entries } = await api('/api/time/bulk', { method: 'POST', body });
+      for (const saved of entries) state.timeLog.push({ ...saved, courseOriginal: saved.course, ...courseDisplay(saved.course) });
+      for (const row of resolved) {
+        const byCourse = (state.weekCounts[row.week.key] ||= {});
+        if (row.saved == null) delete byCourse[row.course];
+        else byCourse[row.course] = row.saved;
+      }
+    }
+    state.timeEdit = null;
+    $('#reviewDialog').close();
+    timeChanged();
+  } catch (err) {
+    $('#reviewError').textContent = `Couldn’t save: ${err.message}`;
+    $('#reviewError').hidden = false;
+  }
+});
 
 function renderTimeEntries() {
   const start = dateKey(state.weekStart);
@@ -1046,11 +1565,11 @@ function renderTimeEntries() {
     { class: 'entries' },
     entries.map((t) => {
       const item = t.itemId && state.items.find((i) => i.id === t.itemId);
-      const title = item?.title || t.itemTitle || 'Study time';
+      const title = t.title || item?.title || t.itemTitle || 'Study time';
       return el(
         'div',
         { class: 'entry', style: `--course: ${courseColorOf(t)}` },
-        el('span', { class: 'when' }, fmtDay(parseDateKey(t.date))),
+        el('span', { class: 'when' }, t.wholeWeek ? `Week of ${fmtShort(parseDateKey(t.date))}` : fmtDay(parseDateKey(t.date))),
         el('div', { class: 'what' }, el('div', { class: 't' }, title), el('div', { class: 'm' }, [t.course, t.note].filter(Boolean).join(' · '))),
         el('span', { class: 'dur' }, fmtDuration(t.minutes)),
         el('button', { type: 'button', onclick: () => openTimeDialog(t) }, 'Edit'),
@@ -1061,7 +1580,8 @@ function renderTimeEntries() {
 }
 
 async function deleteTimeEntry(entry) {
-  if (!confirm(`Delete ${fmtDuration(entry.minutes)} logged for ${entry.course} on ${fmtDay(parseDateKey(entry.date))}?`)) return;
+  const when = entry.wholeWeek ? `the week of ${fmtShort(parseDateKey(entry.date))}` : fmtDay(parseDateKey(entry.date));
+  if (!confirm(`Delete ${fmtDuration(entry.minutes)} logged for ${entry.course} for ${when}?`)) return;
   await api(`/api/time/${encodeURIComponent(entry.id)}`, { method: 'DELETE' });
   state.timeLog = state.timeLog.filter((t) => t.id !== entry.id);
   timeChanged();
@@ -1073,7 +1593,8 @@ async function copyReport(button, { complete, courses, stats }) {
     `Average weekly time, ${range} (${complete.length} full week${complete.length === 1 ? '' : 's'})`,
     ...courses.map(({ course }) => {
       const s = stats.get(course);
-      return `${course}: ${fmtHours(s.average)} h/week (${fmtHours(s.completeMinutes)} h total)`;
+      if (s.average == null) return `${course}: no time logged`;
+      return `${course}: ${fmtHours(s.average)} h/week over ${s.countedWeeks} week${s.countedWeeks === 1 ? '' : 's'} (${fmtHours(s.completeMinutes)} h total)`;
     }),
   ];
   try {
@@ -1087,10 +1608,14 @@ async function copyReport(button, { complete, courses, stats }) {
 
 // ----- Log time dialog: study time, or editing any entry -----
 
-const timeDialog = { editing: null };
+const timeDialog = { editing: null, wholeWeekDate: null };
 
-function openTimeDialog(entry = null) {
+// preset (new entries): { course (original name), date, minutes, title, wholeWeek, info } to fill in,
+// e.g. from a week-by-week table cell.
+function openTimeDialog(entry = null, preset = null) {
   timeDialog.editing = entry;
+  // An entry stays a whole-week entry only while its date is left on that Monday.
+  timeDialog.wholeWeekDate = entry?.wholeWeek ? entry.date : preset?.wholeWeek ? preset.date : null;
   const form = $('#timeForm');
   const f = form.elements;
   form.reset();
@@ -1107,14 +1632,20 @@ function openTimeDialog(entry = null) {
     ...[...courses].sort(([, a], [, b]) => a.localeCompare(b)).map(([original, display]) => el('option', { value: original }, display)),
     el('option', { value: 'Other' }, 'Other (no course)'),
   );
-  f.course.value = entry ? entry.courseOriginal : ([...courses].find(([, display]) => display === state.course)?.[0] ?? '');
-  f.date.value = entry ? entry.date : dateKey(new Date());
-  f.hours.value = entry ? Math.floor(entry.minutes / 60) : '';
-  f.minutes.value = entry ? entry.minutes % 60 : '';
+  const source = entry || preset;
+  f.course.value = source?.course ? (entry ? entry.courseOriginal : preset.course) : ([...courses].find(([, display]) => display === state.course)?.[0] ?? '');
+  f.date.value = source?.date || dateKey(new Date());
+  f.date.max = dateKey(new Date()); // no time for days that haven't come yet
+  f.hours.value = source ? Math.floor(source.minutes / 60) : '';
+  f.minutes.value = source ? source.minutes % 60 : '';
+  f.title.value = source?.title || '';
   f.note.value = entry?.note || '';
+  $('#timeWeekInfo').textContent = preset?.info || '';
+  $('#timeWeekInfo').hidden = !preset?.info;
+  f.hours.max = timeDialog.wholeWeekDate ? 7 * 24 : 24;
   fillAssignmentOptions(entry?.itemId || '');
   $('#timeDialog').showModal();
-  (entry ? f.hours : f.course.value ? f.hours : f.course).focus();
+  (source ? f.hours : f.course.value ? f.hours : f.course).focus();
 }
 
 // Assignments in the chosen course (any course merged under the same display name).
@@ -1130,6 +1661,9 @@ function fillAssignmentOptions(selected) {
   f.itemId.value = selected;
 }
 
+// Our themed calendar instead of the browser's, on every date field in the page.
+document.querySelectorAll('input[type="date"]').forEach((input) => DatePicker.attach(input));
+
 $('#timeChips').append(...quickAddChips($('#timeForm').elements.hours, $('#timeForm').elements.minutes));
 $('#timeForm').elements.course.addEventListener('change', () => fillAssignmentOptions(''));
 $('#timeForm').addEventListener('submit', async (e) => {
@@ -1142,6 +1676,7 @@ $('#timeForm').addEventListener('submit', async (e) => {
     $('#timeError').hidden = false;
   };
   if (minutes < 1) return showError('Enter some time first.');
+  if (f.date.value > dateKey(new Date())) return showError(FUTURE_DATE_ERROR);
   const item = state.items.find((i) => i.id === f.itemId.value);
   const entry = timeDialog.editing;
   const body = {
@@ -1150,6 +1685,8 @@ $('#timeForm').addEventListener('submit', async (e) => {
     minutes,
     itemId: f.itemId.value,
     itemTitle: item?.title || (f.itemId.value && entry?.itemTitle) || '',
+    title: f.title.value,
+    wholeWeek: f.date.value === timeDialog.wholeWeekDate,
     note: f.note.value,
   };
   try {

@@ -53,7 +53,7 @@ function writeJson(file, value) {
 }
 
 const loadConfig = () => ({ ...structuredClone(DEFAULT_CONFIG), ...readJson(CONFIG_PATH, {}) });
-const loadState = () => ({ items: {}, manual: [], timeLog: [], ...readJson(STATE_PATH, {}) });
+const loadState = () => ({ items: {}, manual: [], timeLog: [], weekCounts: {}, ...readJson(STATE_PATH, {}) });
 const loadCache = () => ({ sources: {}, ...readJson(CACHE_PATH, {}) });
 
 // ---------- iCal parsing ----------
@@ -317,9 +317,18 @@ function buildResponse(cache) {
     courseColor: config.courseColors[entry.course] || null,
   }));
 
+  // Overrides for whether an empty week counts toward a course's average, keyed by Monday's date and
+  // original course name ({ 'YYYY-MM-DD': { course: true | false } }); sent by display name.
+  const weekCounts = {};
+  for (const [week, byCourse] of Object.entries(state.weekCounts)) {
+    weekCounts[week] = {};
+    for (const [course, count] of Object.entries(byCourse)) weekCounts[week][config.courseNames[course] || course] = count;
+  }
+
   return {
     items,
     timeLog,
+    weekCounts,
     semester: { start: config.semesterStart, end: config.semesterEnd },
     sources: Object.fromEntries(
       Object.entries(cache.sources).map(([name, s]) => [name, { fetchedAt: s.fetchedAt, error: s.error, count: s.items.length }]),
@@ -390,15 +399,21 @@ function applyItemChanges(entry, body) {
   return entry;
 }
 
-// A time entry from a request body: { course, date: 'YYYY-MM-DD', minutes, itemId?, itemTitle?, note? }.
+// Today's date on this machine as 'YYYY-MM-DD' (time entries store local calendar dates).
+const localDateKey = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+
+// A time entry from a request body: { course, date: 'YYYY-MM-DD', minutes, itemId?, itemTitle?, title?, wholeWeek?, note? }.
 // Returns { entry } or { error }. itemTitle is a snapshot so the entry still reads well if the
-// assignment later drops out of its feed.
+// assignment later drops out of its feed. title is the user's own name for the entry; wholeWeek
+// marks time entered for a whole week (dated its Monday) rather than one day.
 function cleanTimeEntry(body) {
   const course = typeof body.course === 'string' ? body.course.trim() : '';
   const minutes = Math.round(Number(body.minutes));
   if (!course) return { error: 'Choose a course.' };
   if (typeof body.date !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(body.date)) return { error: 'Choose a date.' };
-  if (!Number.isFinite(minutes) || minutes < 1 || minutes > 24 * 60) return { error: 'Enter between 1 minute and 24 hours.' };
+  if (body.date > localDateKey(new Date())) return { error: 'You can’t log time for a day that hasn’t happened yet.' };
+  const maxHours = body.wholeWeek === true ? 7 * 24 : 24;
+  if (!Number.isFinite(minutes) || minutes < 1 || minutes > maxHours * 60) return { error: `Enter between 1 minute and ${maxHours} hours.` };
   const itemId = typeof body.itemId === 'string' && body.itemId ? body.itemId : null;
   return {
     entry: {
@@ -407,6 +422,8 @@ function cleanTimeEntry(body) {
       minutes,
       itemId,
       itemTitle: itemId && typeof body.itemTitle === 'string' ? body.itemTitle.trim() : '',
+      title: typeof body.title === 'string' ? body.title.trim().slice(0, 120) : '',
+      wholeWeek: body.wholeWeek === true,
       note: typeof body.note === 'string' ? body.note.trim() : '',
     },
   };
@@ -664,6 +681,34 @@ async function handleApi(req, res, url) {
     state.timeLog[index] = { ...state.timeLog[index], ...entry };
     writeJson(STATE_PATH, state);
     return send(res, 200, state.timeLog[index]);
+  }
+
+  // Edit mode's changes in one write: { entries: [time entry, ...], weekCounts: [{ week: 'YYYY-MM-DD', course (original name), count: true | false | null }] }.
+  // A weekCounts count says whether an empty week counts toward that course's average; null goes back to the default.
+  // Nothing is saved if any entry is invalid.
+  if (pathname === '/api/time/bulk' && method === 'POST') {
+    const body = await readBody(req);
+    const entries = Array.isArray(body.entries) ? body.entries : [];
+    const weekCounts = Array.isArray(body.weekCounts) ? body.weekCounts : [];
+    const cleaned = [];
+    for (const raw of entries) {
+      const { entry, error } = cleanTimeEntry(raw);
+      if (error) return send(res, 400, { error });
+      cleaned.push(entry);
+    }
+    const state = loadState();
+    const createdAt = new Date().toISOString();
+    const saved = cleaned.map((entry) => ({ id: `time:${crypto.randomUUID()}`, ...entry, createdAt }));
+    state.timeLog.push(...saved);
+    for (const { week, course, count } of weekCounts) {
+      if (typeof week !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(week) || typeof course !== 'string' || !course) continue;
+      const byCourse = (state.weekCounts[week] ||= {});
+      if (typeof count === 'boolean') byCourse[course] = count;
+      else delete byCourse[course];
+      if (!Object.keys(byCourse).length) delete state.weekCounts[week];
+    }
+    writeJson(STATE_PATH, state);
+    return send(res, 200, { entries: saved });
   }
 
   send(res, 404, { error: 'Not found' });

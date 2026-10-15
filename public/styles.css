@@ -67,6 +67,10 @@ button, select {
   cursor: pointer;
 }
 button:hover { background: var(--surface-2); }
+/* Number fields look the same in every browser: no spin arrows (Firefox always draws them, Chromium on
+   hover). Arrow keys still step the value. */
+input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
+input[type="number"]::-webkit-inner-spin-button, input[type="number"]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
 button.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-text); }
 button.danger { color: var(--danger); }
 
@@ -74,19 +78,29 @@ button.danger { color: var(--danger); }
 
 /* ---------- toolbar ---------- */
 
+/* Left, centered middle, right. --toolbar-gap is the least whitespace between groups; when the middle
+   can't fit with it, .stacked moves the middle to its own centered row (app.js fitToolbar). */
 .toolbar {
+  --toolbar-gap: 32px;
   position: sticky;
   top: 0;
   z-index: 5;
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  grid-template-areas: "left middle right";
   align-items: center;
-  gap: 8px;
+  column-gap: var(--toolbar-gap);
+  row-gap: 8px;
   padding: 10px 16px;
   background: var(--surface);
   border-bottom: 1px solid var(--border);
 }
-.toolbar h1 { font-size: 18px; margin: 0 8px 0 0; }
+.toolbar.stacked { grid-template-columns: auto 1fr; grid-template-areas: "left right" "middle middle"; }
+.toolbar-left, .toolbar-middle, .toolbar-right { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.toolbar-left { grid-area: left; }
+.toolbar-middle { grid-area: middle; justify-content: center; flex-wrap: wrap; }
+.toolbar-right { grid-area: right; justify-content: flex-end; }
+.toolbar h1 { font-size: 18px; margin: 0 8px 0 0; white-space: nowrap; }
 
 .segmented { display: inline-flex; }
 .segmented button { border-radius: 0; }
@@ -228,6 +242,8 @@ main { padding: 0 16px 24px; }
 
 /* ---------- list view ---------- */
 
+/* The List and Time views are centered columns. */
+.list-view { max-width: 760px; margin: 0 auto; }
 .group { margin-bottom: 20px; }
 .group h2 { font-size: 14px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); margin: 12px 0 6px; }
 .group h2.overdue { color: var(--danger); }
@@ -515,7 +531,7 @@ body.view-time .assignments-only { display: none !important; }
 .time-section-entry .dur { margin-left: auto; color: var(--text); white-space: nowrap; }
 
 /* Time view */
-.time-view { display: flex; flex-direction: column; gap: 12px; max-width: 1100px; }
+.time-view { display: flex; flex-direction: column; gap: 12px; max-width: 1100px; margin: 0 auto; }
 .time-view .pager { margin-bottom: 0; }
 .time-head { display: flex; align-items: center; gap: 8px; margin-top: 4px; }
 .time-head h2 { font-size: 14px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); margin: 0; }
@@ -548,12 +564,52 @@ table.weeks { border-collapse: collapse; width: 100%; font-variant-numeric: tabu
 .weeks td.cell .bar { position: absolute; inset: 3px 4px; border-radius: 4px; background: var(--course); opacity: var(--a); }
 .weeks td.cell .v { position: relative; }
 .weeks td.zero { color: var(--muted); }
+.weeks td.editable { cursor: text; }
+.weeks td.editable:hover { box-shadow: inset 0 0 0 1px var(--border); }
+.weeks .week-input { width: 64px; text-align: right; font: inherit; padding: 2px 6px; border-radius: 6px; border: 1px solid var(--border); background: var(--field); color: var(--text); }
+.weeks .week-input:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+.weeks .week-input.skipped { color: var(--muted); text-decoration: line-through; }
+.weeks td.cell-edit .hint { display: block; font-size: 11px; color: var(--muted); white-space: normal; max-width: 220px; margin-left: auto; }
+.weeks td.cell-edit .hint.error { color: var(--warn); }
+.weeks td.edit-cell.changed .week-input { border-color: var(--accent); }
+.weeks .muted { color: var(--muted); }
+.table-wrap.editing tbody tr { cursor: default; }
+.table-wrap.editing tbody tr:hover td { background: none; }
+.table-wrap.editing tbody tr.current td { background: var(--today); }
+.edit-banner { padding: 8px 12px; font-size: 12.5px; background: var(--surface-2); border-bottom: 1px solid var(--border); }
+.weeks .row-actions button { padding: 2px 8px; font-size: 12px; margin-left: 4px; }
+/* Counts / Skipped switch on 0 h weeks in edit mode */
+/* Each class's label, switch and box sit together at the right of its column; the padding keeps the
+   classes apart. */
+.table-wrap.editing .weeks thead th:not(:first-child), .weeks td.edit-cell { padding-left: 40px; }
+.weeks .switch-slot { display: inline-block; width: 92px; text-align: right; vertical-align: middle; }
+.switch { display: inline-flex; align-items: center; gap: 6px; margin-right: 8px; padding: 0; background: none; border: none; color: var(--muted); font: inherit; font-size: 11px; cursor: pointer; vertical-align: middle; }
+.switch .track { position: relative; width: 30px; height: 16px; border-radius: 999px; background: var(--surface-2); border: 1px solid var(--border); flex: none; }
+.switch .track::after { content: ""; position: absolute; top: 2px; left: 2px; width: 10px; height: 10px; border-radius: 50%; background: var(--muted); transition: left 0.12s; }
+.switch[aria-checked="true"] .track { background: var(--accent); border-color: var(--accent); }
+.switch[aria-checked="true"] .track::after { left: 16px; background: var(--accent-text); }
+.switch .label { width: 46px; text-align: right; }
+.switch:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 4px; }
+/* Review dialog for edit mode */
+#reviewDialog { width: min(720px, calc(100vw - 32px)); }
+.review-body h3 { margin: 6px 0 2px; font-size: 12px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); }
+.review-body table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+.review-body th, .review-body td { padding: 5px 6px; text-align: left; border-bottom: 1px solid var(--border); white-space: nowrap; }
+.review-body th { font-size: 12px; color: var(--muted); font-weight: 600; }
+.review-body .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; }
+.review-body .wk { color: var(--muted); font-size: 12px; margin-left: 6px; }
+.review-body .muted { color: var(--muted); }
+.review-body .adds input { width: 56px; text-align: right; }
+.review-body .unit { color: var(--muted); font-size: 12px; margin: 0 6px 0 3px; }
+.review-body .remove { padding: 0 8px; color: var(--muted); }
+.review-summary { align-self: center; }
 .weeks .total { font-weight: 600; border-left: 1px solid var(--border); }
 .weeks tr.current td { background: var(--today); }
 .weeks tr.selected td:first-child { box-shadow: inset 3px 0 var(--accent); font-weight: 600; }
 .weeks .wk { color: var(--muted); font-size: 12px; margin-left: 6px; font-weight: 400; }
 .weeks tfoot td { font-weight: 600; border-bottom: none; border-top: 2px solid var(--border); }
-.weeks tfoot td:first-child small { display: block; font-weight: 400; color: var(--muted); font-size: 11px; }
+.weeks tfoot td small { display: block; font-weight: 400; color: var(--muted); font-size: 11px; }
+.weeks tfoot td:first-child small { white-space: normal; max-width: 260px; }
 
 .entries { display: flex; flex-direction: column; gap: 6px; max-width: 760px; }
 .entry { display: flex; align-items: center; gap: 10px; padding: 6px 8px; background: var(--surface); border: 1px solid var(--border); border-left: 4px solid var(--course, var(--border)); border-radius: 6px; }
@@ -564,3 +620,66 @@ table.weeks { border-collapse: collapse; width: 100%; font-variant-numeric: tabu
 .entry .dur { font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .entry button { padding: 2px 8px; font-size: 12px; }
 .empty.small { padding: 12px 0; text-align: left; }
+
+/* ---------- date picker (public/date-picker.js) ---------- */
+
+/* The button that stands in for a (hidden) date field and opens the calendar. Styled like the other
+   fields, with a calendar icon in a mid gray that reads on light and dark themes. */
+.dp-field {
+  display: block;
+  width: 100%;
+  min-width: 0;
+  padding: 6px 30px 6px 8px;
+  text-align: left;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  background-color: var(--field);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text);
+}
+/* The icon is set for hover too: the general button:hover rule sets the whole background, which would
+   otherwise drop it. */
+.dp-field, .dp-field:hover {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 16 16' fill='none' stroke='%238b8e93' stroke-width='1.4' stroke-linecap='round'%3E%3Crect x='2' y='3' width='12' height='11' rx='2'/%3E%3Cpath d='M2 6.5h12M5 1.8v2.4M11 1.8v2.4'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 8px center;
+}
+.dp-field:hover { background-color: var(--surface-2); }
+.dp-field.dp-empty { color: var(--muted); }
+.log-popover .dp-field { flex: 1; padding-top: 4px; padding-bottom: 4px; }
+
+.dp-root {
+  position: fixed;
+  inset: auto;
+  margin: 0;
+  width: 268px;
+  padding: 10px;
+  background: var(--surface);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  box-shadow: 0 10px 30px rgb(0 0 0 / 0.18), 0 2px 6px rgb(0 0 0 / 0.08);
+  font-size: 13px;
+}
+.dp-root:not(:popover-open) { display: none; }
+.dp-head { display: flex; align-items: center; gap: 4px; margin-bottom: 6px; }
+.dp-title { flex: 1; text-align: center; font-weight: 600; font-size: 14px; }
+.dp-nav { width: 30px; height: 30px; padding: 0; border: none; border-radius: 50%; background: none; font-size: 18px; line-height: 1; color: var(--text); }
+.dp-nav:hover { background: var(--surface-2); }
+.dp-nav:disabled { opacity: 0.3; cursor: default; background: none; }
+.dp-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px; }
+.dp-dow { padding: 4px 0; text-align: center; font-size: 11px; font-weight: 600; color: var(--muted); }
+.dp-day { height: 32px; padding: 0; border: none; border-radius: 8px; background: none; color: var(--text); font-variant-numeric: tabular-nums; }
+.dp-day:hover { background: var(--surface-2); }
+.dp-day.dp-other { color: var(--muted); }
+.dp-day.dp-today-mark { box-shadow: inset 0 0 0 1.5px var(--accent); color: var(--accent); font-weight: 600; }
+.dp-day.dp-selected { background: var(--accent); color: var(--accent-text); box-shadow: none; font-weight: 600; }
+/* Days that can't be chosen (for time, days that haven't come yet): faint, not crossed out. */
+.dp-day.dp-unavailable { color: var(--muted); opacity: 0.4; cursor: default; }
+.dp-day.dp-unavailable:hover { background: none; }
+.dp-day:focus-visible, .dp-nav:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.dp-foot { display: flex; gap: 6px; margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--border); }
+.dp-today, .dp-clear { padding: 3px 12px; font-size: 12px; border-radius: 12px; }
+.dp-today { margin-left: auto; }

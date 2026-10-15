@@ -17,29 +17,33 @@
     </script>
   </head>
   <body>
+    <!-- Three groups: the middle one is centered on the bar, or gets its own row when it doesn't fit (app.js fitToolbar). -->
     <header class="toolbar">
-      <h1>Assignments</h1>
-
-      <div class="segmented" role="tablist" aria-label="View">
-        <button type="button" data-view="week" role="tab">Week</button>
-        <button type="button" data-view="list" role="tab">List</button>
-        <button type="button" data-view="time" role="tab">Time</button>
+      <div class="toolbar-left">
+        <h1>Assignments</h1>
+        <div class="segmented" role="tablist" aria-label="View">
+          <button type="button" data-view="list" role="tab">List</button>
+          <button type="button" data-view="week" role="tab">Week</button>
+          <button type="button" data-view="time" role="tab">Time</button>
+        </div>
       </div>
 
-      <div class="spacer"></div>
+      <div class="toolbar-middle">
+        <select id="courseFilter" aria-label="Filter by course"></select>
+        <!-- .assignments-only controls are hidden in the Time view. -->
+        <label class="check assignments-only"><input type="checkbox" id="showDone" /> Show done</label>
+        <label class="check assignments-only"><input type="checkbox" id="showHidden" /> Show hidden</label>
+        <button type="button" id="clearOverdueBtn" class="assignments-only" hidden></button>
+        <button type="button" id="clearedBtn" class="assignments-only" hidden></button>
+      </div>
 
-      <select id="courseFilter" aria-label="Filter by course"></select>
-      <!-- .assignments-only controls are hidden in the Time view. -->
-      <label class="check assignments-only"><input type="checkbox" id="showDone" /> Show done</label>
-      <label class="check assignments-only"><input type="checkbox" id="showHidden" /> Show hidden</label>
-
-      <button type="button" id="clearOverdueBtn" class="assignments-only" hidden></button>
-      <button type="button" id="clearedBtn" class="assignments-only" hidden></button>
-      <!-- Hovering shows each source's sync status (app.js renderStatus). -->
-      <button type="button" id="syncBtn" class="assignments-only">Sync</button>
-      <button type="button" id="addBtn" class="primary assignments-only">+ Add</button>
-      <button type="button" id="themesBtn" class="icon-btn" aria-label="Themes" title="Themes">🎨</button>
-      <button type="button" id="settingsBtn" class="icon-btn" aria-label="Settings" title="Settings">⚙</button>
+      <div class="toolbar-right">
+        <!-- Hovering shows each source's sync status (app.js renderStatus). -->
+        <button type="button" id="syncBtn" class="assignments-only">Sync</button>
+        <button type="button" id="addBtn" class="primary assignments-only">+ Add</button>
+        <button type="button" id="themesBtn" class="icon-btn" aria-label="Themes" title="Themes">🎨</button>
+        <button type="button" id="settingsBtn" class="icon-btn" aria-label="Settings" title="Settings">⚙</button>
+      </div>
     </header>
 
     <div id="stoppedBanner" class="banner" role="status" hidden>
@@ -155,6 +159,7 @@
     <dialog id="timeDialog">
       <form method="dialog" class="dialog-body" id="timeForm">
         <h2 id="timeDialogTitle">Log time</h2>
+        <label>Title (optional)<input name="title" maxlength="120" placeholder="Study time" /></label>
         <label>Course<select name="course" required></select></label>
         <div class="row">
           <label>Date<input name="date" type="date" required /></label>
@@ -164,11 +169,28 @@
         <div class="chips" id="timeChips"></div>
         <label>Assignment (optional)<select name="itemId"></select></label>
         <label>Note (optional)<input name="note" maxlength="200" /></label>
+        <small id="timeWeekInfo" hidden></small>
         <small id="timeError" class="warning" hidden></small>
         <div class="dialog-actions">
           <div class="spacer"></div>
           <button type="button" data-close>Cancel</button>
           <button value="save" class="primary" id="timeSaveBtn">Log time</button>
+        </div>
+      </form>
+    </dialog>
+
+    <!-- Review edit-mode changes to the week-by-week table before saving -->
+    <dialog id="reviewDialog">
+      <form method="dialog" class="dialog-body" id="reviewForm">
+        <h2>Review changes</h2>
+        <small id="reviewNote">Each time row is saved as one "Manually Entered Time" entry dated the Monday of that week.</small>
+        <div id="reviewBody" class="review-body"></div>
+        <small id="reviewError" class="warning" hidden></small>
+        <div class="dialog-actions">
+          <small id="reviewSummary" class="review-summary"></small>
+          <div class="spacer"></div>
+          <button type="button" data-close>Cancel</button>
+          <button value="save" class="primary">Save changes</button>
         </div>
       </form>
     </dialog>
@@ -229,6 +251,7 @@
     <script src="theme-core.js"></script>
     <script src="icon-core.js"></script>
     <script src="color-picker.js"></script>
+    <script src="date-picker.js"></script>
     <script src="app.js"></script>
   </body>
 </html>
